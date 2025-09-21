@@ -1,11 +1,11 @@
 import { monthGrid, inMonth, getWeekDayLabels } from '../utils/dateUtils'
-import { parseISO, format, startOfDay, endOfDay, isWithinInterval, set } from 'date-fns'
+import { parseISO, startOfDay, endOfDay, isWithinInterval, set } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import { startOfMonth, endOfMonth } from 'date-fns'
-import { DragDropProvider, DragDropSensors, closestCenter, createDraggable, createDroppable } from '@thisbeyond/solid-dnd'
+import { DragDropProvider, DragDropSensors, closestCenter, createDraggable, createDroppable, DragOverlay } from '@thisbeyond/solid-dnd'
 import type { DragEvent } from '@thisbeyond/solid-dnd'
-import { createSignal, onMount, createEffect, onCleanup, For } from 'solid-js'
+import { createSignal, onMount, createEffect, For } from 'solid-js'
 import MonthCell from './MonthCell'
 import MonthPill from './MonthPill'
 import { defaultMonthClickTimes } from '../utils/slots'
@@ -24,6 +24,11 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
   // Roving tabindex for keyboard navigation within the month grid
   const [focusIdx, setFocusIdx] = createSignal(0)
   let cellRefs: Array<HTMLDivElement | null> = []
+  // Track active draggable id to hide source while dragging
+  const [activeDragId, setActiveDragId] = createSignal<string | null>(null)
+  // Track scroll containers per day and restore scroll positions after drop
+  const scrollElMap = new Map<string, HTMLDivElement>()
+  const scrollPos = new Map<string, number>()
   onMount(() => {
     // Focus today's cell if present
     const todayISO = new Date().toISOString().slice(0, 10)
@@ -36,28 +41,55 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
     if (el) el.focus()
   })
 
-  // Day popover for listing all events when "+N more" is clicked
-  const [openDayISO, setOpenDayISO] = createSignal<string | null>(null)
+  // No popover; all events are visible via scroll
 
   function onDragEnd(ev: DragEvent) {
     const src = ev.draggable?.id as string | undefined
     const dest = ev.droppable?.id as string | undefined
+    // Clear active id regardless of valid drop
+    setActiveDragId(null)
     if (!src || !dest) return
     const targetDate = new Date(dest)
     const occ = visible().find((e) => (e.sourceId ?? e.id) === src)
     if (!occ) return
     // Skip moving expanded occurrences of recurring events for now
     if (occ.sourceId) return
+
+    // Capture scroll positions for source and destination days before state update
+    const srcDayISO = startOfDay(parseISO(occ.start)).toISOString()
+    const destDayISO = startOfDay(targetDate).toISOString()
+    const srcEl = scrollElMap.get(srcDayISO)
+    const destEl = scrollElMap.get(destDayISO)
+    if (srcEl) scrollPos.set(srcDayISO, srcEl.scrollTop)
+    if (destEl) scrollPos.set(destDayISO, destEl.scrollTop)
+
     const start = parseISO(occ.start)
     const end = parseISO(occ.end)
     const newStart = set(targetDate, { hours: start.getHours(), minutes: start.getMinutes(), seconds: 0, milliseconds: 0 })
     const duration = end.getTime() - start.getTime()
     const newEnd = new Date(newStart.getTime() + duration)
     actions.update(occ.id, { start: newStart.toISOString(), end: newEnd.toISOString() })
+
+    // Restore scroll positions on next frame after DOM updates
+    requestAnimationFrame(() => {
+      const sEl = scrollElMap.get(srcDayISO)
+      const dEl = scrollElMap.get(destDayISO)
+      const sTop = scrollPos.get(srcDayISO)
+      const dTop = scrollPos.get(destDayISO)
+      if (sEl != null && sTop != null) sEl.scrollTop = sTop
+      if (dEl != null && dTop != null) dEl.scrollTop = dTop
+    })
   }
 
   return (
-    <DragDropProvider collisionDetector={closestCenter} onDragEnd={onDragEnd}>
+  <DragDropProvider
+      collisionDetector={closestCenter}
+      onDragStart={(ev) => {
+        const id = ev.draggable?.id as string | undefined
+        if (id) setActiveDragId(id)
+      }}
+      onDragEnd={onDragEnd}
+    >
       <DragDropSensors />
 
       <div class="grid grid-cols-7  gap-px bg-gray-50 border-b border-gray-200" role="grid" aria-label="Month grid">
@@ -73,7 +105,7 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
         </For>
 
         {/* Calendar days cells */}
-        {days().map((d, i) => {
+  {days().map((d, i) => {
           const dayEvents = visible().filter((e) =>
             isWithinInterval(d, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) })
           )
@@ -88,6 +120,9 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 tabIndex={focusIdx() === i ? 0 : -1}
                 setRef={(el) => (cellRefs[i] = el)}
                 isLastInRow={(i + 1) % 7 === 0}
+                setScrollRef={(el) => {
+                  if (el) scrollElMap.set(startOfDay(d).toISOString(), el)
+                }}
                 onDayClick={() => {
                   if (!props.onDayClick) return
                   const { startISO, endISO } = defaultMonthClickTimes(d)
@@ -114,12 +149,13 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 }}
                 childrenEvents={(
                   <>
-                    {dayEvents.slice(0, 4).map((e) => (
+                    {dayEvents.map((e) => (
                       <MonthDraggable 
                         id={e.sourceId ?? e.id}
                         onEventClick={props.onEventClick}
                         start={e.start}
                         end={e.end}
+                        hideSource={activeDragId() === (e.sourceId ?? e.id)}
                       >
                         <MonthPill
                           title={e.title}
@@ -129,37 +165,34 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                     ))}
                   </>
                 )}
-                moreCount={dayEvents.length > 4 ? dayEvents.length - 4 : 0}
-                onMoreClick={() => setOpenDayISO(d.toISOString())}
               />
             </MonthDroppable>
           )
         })}
       </div>
-      {/* Day events popover */}
-      <ShowDayPopover
-        dayISO={openDayISO()}
-        onClose={() => setOpenDayISO(null)}
-        events={visible()}
-        onEventClick={(id, patch) => props.onEventClick?.(id, patch)}
-        onAdd={(dayISO) => {
-          const d = new Date(dayISO)
-          const s = startOfDay(d)
-          s.setHours(12, 0, 0, 0)
-          const e = new Date(s.getTime() + 60 * 60000)
-          props.onDayClick?.(s.toISOString(), e.toISOString())
+      {/* Optional: a simple overlay keeps a drag preview so the source stays visible */}
+      <DragOverlay>
+        {(draggable) => {
+          if (!draggable) return null as any
+          // Find event title/color for preview if available
+          const occ = visible().find((e) => (e.sourceId ?? e.id) === draggable.id)
+          return (
+            <div class="pointer-events-none">
+              <MonthPill title={occ?.title ?? ''} color={occ?.color} />
+            </div>
+          )
         }}
-      />
+      </DragOverlay>
     </DragDropProvider>
   )
 }
 
-function MonthDraggable(props: { id: string; children: any; onEventClick?: (id: string, patch?: Partial<EventItem>) => void; start: string; end: string }) {
+function MonthDraggable(props: { id: string; children: any; onEventClick?: (id: string, patch?: Partial<EventItem>) => void; start: string; end: string; hideSource?: boolean }) {
   const draggable = createDraggable(props.id)
   return (
     <div 
       use:draggable={draggable} 
-      class="relative z-20"
+  class={`relative z-20 ${props.hideSource ? 'invisible' : ''}`}
       onClick={(e) => {
         // Only trigger click if it's not a drag operation
         if (!e.defaultPrevented) {
@@ -180,106 +213,4 @@ function MonthDroppable(props: { id: string; children: any }) {
   )
 }
 
-function ShowDayPopover(props: {
-  dayISO: string | null
-  events: ReturnType<typeof expandEventsForRange>
-  onClose: () => void
-  onEventClick: (id: string, patch?: Partial<EventItem>) => void
-  onAdd: (dayISO: string) => void
-}) {
-  if (!props.dayISO) return null as any
-  const day = parseISO(props.dayISO)
-  let dialogEl: HTMLDivElement | null = null
-  let lastFocus: Element | null = null
-
-  function getFocusable(root: HTMLElement): HTMLElement[] {
-    const sel = [
-      'a[href]', 'area[href]', 'button:not([disabled])', 'input:not([disabled])', 'select:not([disabled])',
-      'textarea:not([disabled])', 'iframe', 'object', 'embed', '[tabindex]:not([tabindex="-1"])', '[contenteditable="true"]'
-    ].join(',')
-    return Array.from(root.querySelectorAll<HTMLElement>(sel)).filter((el) => el.offsetParent !== null)
-  }
-
-  onMount(() => {
-    lastFocus = document.activeElement
-    // Focus first focusable in dialog
-    queueMicrotask(() => {
-      const els = dialogEl ? getFocusable(dialogEl) : []
-        ; (els[0] as HTMLElement | undefined)?.focus()
-    })
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        props.onClose()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    onCleanup(() => window.removeEventListener('keydown', onKey))
-  })
-
-  onCleanup(() => {
-    const el = lastFocus as HTMLElement | null
-    if (el?.focus) el.focus()
-  })
-
-  function onKeyDownTrap(e: KeyboardEvent) {
-    if (e.key !== 'Tab' || !dialogEl) return
-    const els = getFocusable(dialogEl)
-    if (els.length === 0) return
-    const first = els[0]
-    const last = els[els.length - 1]
-    const active = document.activeElement
-    if (!e.shiftKey && active === last) {
-      e.preventDefault()
-        ; (first as HTMLElement).focus()
-    } else if (e.shiftKey && active === first) {
-      e.preventDefault()
-        ; (last as HTMLElement).focus()
-    }
-  }
-
-  const list = props.events
-    .filter((e) => isWithinInterval(day, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) }))
-    .sort((a, b) => +new Date(a.start) - +new Date(b.start))
-  return (
-    <div class="fixed inset-0 z-40 flex items-center justify-center" aria-hidden={false}>
-      <div class="absolute inset-0 bg-black/30" onClick={props.onClose} />
-      <div
-        ref={(el) => (dialogEl = el)}
-        class="relative z-10 w-[min(90vw,480px)] max-h-[80vh] rounded bg-white shadow-lg overflow-hidden outline-none"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Day events"
-        tabindex={-1}
-        onKeyDown={(e) => onKeyDownTrap(e as unknown as KeyboardEvent)}
-      >
-        <div class="flex items-center justify-between px-4 py-2 border-b">
-          <div class="font-semibold">{format(day, 'PPPP')}</div>
-          <div class="flex gap-2">
-            <button class="px-2 py-1 text-sm rounded border" onClick={() => props.onAdd(props.dayISO!)}>Add event</button>
-            <button class="px-2 py-1 text-sm rounded border" onClick={props.onClose}>Close</button>
-          </div>
-        </div>
-        <div class="p-2 overflow-auto divide-y">
-          {list.map((e) => (
-            <button
-              class="w-full text-left px-2 py-2 hover:bg-gray-50 rounded"
-              title={e.title}
-              onClick={() => props.onEventClick(e.sourceId ?? e.id, { start: e.start, end: e.end })}
-            >
-              <div class="flex items-center gap-2">
-                <span class="inline-block w-2 h-2 rounded" style={{ 'background-color': e.color ?? '#94a3b8' }} />
-                <span class="font-medium truncate flex-1">{e.title}</span>
-                <span class="text-xs text-gray-600 whitespace-nowrap">{format(parseISO(e.start), 'p')} – {format(parseISO(e.end), 'p')}</span>
-              </div>
-              {e.location && <div class="text-xs text-gray-500 truncate mt-0.5">{e.location}</div>}
-            </button>
-          ))}
-          {list.length === 0 && (
-            <div class="text-sm text-gray-500 px-2 py-6 text-center">No events</div>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+// Popover removed

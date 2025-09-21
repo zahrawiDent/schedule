@@ -11,11 +11,10 @@ export default function MonthCell(props: {
   inMonth: boolean
   tabIndex: number
   setRef?: (el: HTMLDivElement) => void
+  setScrollRef?: (el: HTMLDivElement | null) => void
   onKeyDown?: (e: KeyboardEvent) => void
   onDayClick?: () => void
   childrenEvents: JSX.Element
-  moreCount?: number
-  onMoreClick?: () => void
   isLastInRow?: boolean
 }) {
   // is day is today
@@ -27,7 +26,7 @@ export default function MonthCell(props: {
       ref={props.setRef}
       class={`
         border-b border-gray-200 ${props.isLastInRow ? '' : 'border-r'}
-        cursor-pointer min-h-28 bg-white p-2
+  cursor-pointer h-36 sm:h-40 md:h-44 bg-white p-2
         flex flex-col relative outline-none 
         ${props.inMonth ? '' : 'opacity-50'}`}
       onClick={props.onDayClick}
@@ -45,17 +44,9 @@ export default function MonthCell(props: {
         </span>
       </div>
 
-      <div class="mt-1 space-y-1">
+  {/* Scrollable events area */}
+  <div class="month-scroll mt-1 space-y-1 flex-1 min-h-0 overflow-y-auto pr-1" ref={props.setScrollRef as any}>
         {props.childrenEvents}
-        {typeof props.moreCount === 'number' && props.moreCount > 0 && (
-          <button
-            type="button"
-            class="text-[10px] text-blue-600 hover:underline"
-            onClick={(ev) => { ev.stopPropagation(); props.onMoreClick?.() }}
-          >
-            +{props.moreCount} more
-          </button>
-        )}
       </div>
     </div>
   )
