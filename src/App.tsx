@@ -81,21 +81,28 @@ function CalendarApp() {
 
   return (
     <div class="min-h-screen flex flex-col">
+      {/* CalendarNav */}
       <CalendarNav />
-      <div class="p-2 flex gap-2 items-center border-b">
-        <button class="px-3 py-1 rounded bg-blue-600 text-white" onClick={() => setOpen(true)} aria-keyshortcuts="N">Add event</button>
-        <button class="px-3 py-1 rounded border" onClick={async () => {
-          if (!('Notification' in window)) return
-          if (Notification.permission !== 'granted') await Notification.requestPermission()
-          setRemindersOn((v) => !v)
-        }}>
-          {remindersOn() ? 'Reminders: On' : 'Reminders: Off'}
-        </button>
-      </div>
+
+      {/* Event controls (add, reminders) */}
+
+      {/* <div class="p-2 flex gap-2 items-center border-b"> */}
+      {/*   <button class="px-3 py-1 rounded bg-blue-600 text-white" onClick={() => setOpen(true)} aria-keyshortcuts="N">Add event</button> */}
+      {/*   <button class="px-3 py-1 rounded border" onClick={async () => { */}
+      {/*     if (!('Notification' in window)) return */}
+      {/*     if (Notification.permission !== 'granted') await Notification.requestPermission() */}
+      {/*     setRemindersOn((v) => !v) */}
+      {/*   }}> */}
+      {/*     {remindersOn() ? 'Reminders: On' : 'Reminders: Off'} */}
+      {/*   </button> */}
+      {/* </div> */}
+
       <div class="flex-1 overflow-hidden flex">
-        <div class="hidden sm:block shrink-0">
-          <Sidebar />
-        </div>
+        {/* Sidebar */}
+        {/* <div class="hidden sm:block shrink-0"> */}
+        {/*   <Sidebar /> */}
+        {/* </div> */}
+
         <div class="flex-1 overflow-auto">
           <Show when={state.viewMode === 'month'}>
             <MonthView

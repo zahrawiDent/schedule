@@ -58,11 +58,11 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
   return (
     <DragDropProvider collisionDetector={closestCenter} onDragEnd={onDragEnd}>
       <DragDropSensors />
-      <div class="grid grid-cols-7 grid-rows-6 gap-px bg-gray-200" role="grid" aria-label="Month grid">
+      <div class="grid grid-cols-7 grid-rows-6 gap-px bg-gray-50 border-b border-gray-200" role="grid" aria-label="Month grid">
         {days().map((d, i) => {
-        const dayEvents = visible().filter((e) =>
-          isWithinInterval(d, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) })
-        )
+          const dayEvents = visible().filter((e) =>
+            isWithinInterval(d, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) })
+          )
           return (
             <MonthDroppable id={d.toISOString()}>
               <MonthCell
@@ -96,7 +96,7 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 }}
                 childrenEvents={(
                   <>
-        {dayEvents.slice(0, 4).map((e) => (
+                    {dayEvents.slice(0, 4).map((e) => (
                       <MonthDraggable id={e.sourceId ?? e.id}>
                         <MonthPill
                           title={e.title}
@@ -135,14 +135,14 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
 function MonthDraggable(props: { id: string; children: any }) {
   const draggable = createDraggable(props.id)
   return (
-  <div use:draggable={draggable} class="relative z-20">{props.children}</div>
+    <div use:draggable={draggable} class="relative z-20">{props.children}</div>
   )
 }
 
 function MonthDroppable(props: { id: string; children: any }) {
   const droppable = createDroppable(props.id)
   return (
-  <div use:droppable={droppable} class="overflow-visible">{props.children}</div>
+    <div use:droppable={droppable} class="overflow-visible">{props.children}</div>
   )
 }
 
@@ -160,8 +160,8 @@ function ShowDayPopover(props: {
 
   function getFocusable(root: HTMLElement): HTMLElement[] {
     const sel = [
-      'a[href]','area[href]','button:not([disabled])','input:not([disabled])','select:not([disabled])',
-      'textarea:not([disabled])','iframe','object','embed','[tabindex]:not([tabindex="-1"])','[contenteditable="true"]'
+      'a[href]', 'area[href]', 'button:not([disabled])', 'input:not([disabled])', 'select:not([disabled])',
+      'textarea:not([disabled])', 'iframe', 'object', 'embed', '[tabindex]:not([tabindex="-1"])', '[contenteditable="true"]'
     ].join(',')
     return Array.from(root.querySelectorAll<HTMLElement>(sel)).filter((el) => el.offsetParent !== null)
   }
@@ -171,7 +171,7 @@ function ShowDayPopover(props: {
     // Focus first focusable in dialog
     queueMicrotask(() => {
       const els = dialogEl ? getFocusable(dialogEl) : []
-      ;(els[0] as HTMLElement | undefined)?.focus()
+        ; (els[0] as HTMLElement | undefined)?.focus()
     })
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -197,10 +197,10 @@ function ShowDayPopover(props: {
     const active = document.activeElement
     if (!e.shiftKey && active === last) {
       e.preventDefault()
-      ;(first as HTMLElement).focus()
+        ; (first as HTMLElement).focus()
     } else if (e.shiftKey && active === first) {
       e.preventDefault()
-      ;(last as HTMLElement).focus()
+        ; (last as HTMLElement).focus()
     }
   }
 
