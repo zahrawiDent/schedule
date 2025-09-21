@@ -5,7 +5,7 @@ import MonthView from './components/MonthView'
 import WeekView from './components/WeekView'
 import DayView from './components/DayView'
 import EventForm from './components/EventForm'
-import Sidebar from './components/Sidebar'
+// import Sidebar from './components/Sidebar'
 import { onCleanup, onMount } from 'solid-js'
 import { scheduleReminders } from './utils/reminders'
 
@@ -13,7 +13,7 @@ function CalendarApp() {
   const [open, setOpen] = createSignal(false)
   const [editing, setEditing] = createSignal<any>(null)
   const [state, actions] = useEvents()
-  const [remindersOn, setRemindersOn] = createSignal(false)
+  const [remindersOn] = createSignal(false)
 
   function submit(data: any) {
     if (data.id) actions.update(data.id, data)

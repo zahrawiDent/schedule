@@ -9,17 +9,19 @@ import { addHours, format, startOfDay } from 'date-fns'
 export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; children: JSX.Element }) {
   const left = props.leftColWidth ?? 60
   return (
-    <div class={`grid`} style={{ 'grid-template-columns': `${left}px 1fr` }}>
-      <div></div>
-      <div class="p-2 text-center font-medium border-b">{format(props.anchor, 'PPPP')}</div>
-      <div class="border-r" style={{ height: `${ROW_H * 24}px` }}>
+    <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': `${left}px 1fr` }}>
+      <div class="bg-white border-b border-gray-200"></div>
+      <div class="bg-white p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200">{format(props.anchor, 'PPPP')}</div>
+      <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
         {HOURS.map((h) => (
           <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(props.anchor), h), 'ha')}</div>
         ))}
       </div>
-      <div class="relative" style={{ height: `${ROW_H * 24}px` }}>
+      <div class="relative bg-white border-b border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
         {HOURS.map((h) => (
-          <div class="absolute left-0 right-0 border-b" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
+          h > 0 ? (
+            <div class="absolute left-0 right-0 border-b border-gray-200" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
+          ) : null
         ))}
         {props.children}
       </div>

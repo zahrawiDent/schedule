@@ -23,9 +23,6 @@ export type EventBlockProps = {
 export default function EventBlock(props: EventBlockProps) {
   const s = parseISO(props.startISO)
   const e = parseISO(props.endISO)
-  const duration = e.getTime() - s.getTime()
-  const durationMinutes = duration / (1000 * 60)
-  const isShort = durationMinutes < 60 // Less than 1 hour
   return (
     <div
       class="absolute rounded-lg shadow-sm border border-white/20 text-white cursor-pointer z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100"
