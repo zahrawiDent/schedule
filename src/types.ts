@@ -4,6 +4,8 @@ export type Category = 'College' | 'Personal' | 'Other'
 
 export type EventId = string
 
+export type WeekStartDay = 0 | 1 | 2 | 3 | 4 | 5 | 6 // 0=Sunday, 1=Monday, etc.
+
 export interface EventBase {
   id: EventId
   title: string

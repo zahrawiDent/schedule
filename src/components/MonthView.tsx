@@ -1,4 +1,4 @@
-import { monthGrid, inMonth } from '../utils/dateUtils'
+import { monthGrid, inMonth, getWeekDayLabels } from '../utils/dateUtils'
 import { parseISO, format, startOfDay, endOfDay, isWithinInterval, set } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
@@ -11,12 +11,11 @@ import MonthPill from './MonthPill'
 import { defaultMonthClickTimes } from '../utils/slots'
 import type { EventItem } from '../types'
 
-const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-
 export default function MonthView(props: { onEventClick?: (id: string, patch?: Partial<EventItem>) => void; onDayClick?: (startISO: string, endISO: string) => void }) {
   const [state, actions] = useEvents()
   const anchor = () => parseISO(state.viewDate)
-  const days = () => monthGrid(anchor())
+  const days = () => monthGrid(anchor(), state.weekStartsOn)
+  const weekDayLabels = () => getWeekDayLabels(state.weekStartsOn)
   const rangeStart = () => startOfDay(startOfMonth(anchor()))
   const rangeEnd = () => endOfDay(endOfMonth(anchor()))
   const occurrences = () => expandEventsForRange(state.events, rangeStart(), rangeEnd())
@@ -65,9 +64,9 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
         {/* grid-rows-6 */}
 
         {/* Day labels */}
-        <For each={WEEK_DAYS}>
+        <For each={weekDayLabels()}>
           {(day, index) => (
-            <div class={`p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200 ${index() === WEEK_DAYS.length - 1 ? '' : 'border-r'}`}>
+            <div class={`p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200 ${index() === weekDayLabels().length - 1 ? '' : 'border-r'}`}>
               {day}
             </div>
           )}

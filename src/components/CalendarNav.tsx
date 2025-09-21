@@ -1,5 +1,6 @@
 import { addMonths, addWeeks, addDays, parseISO } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
+import type { WeekStartDay } from '../types'
 
 import { For } from 'solid-js';
 import { format } from 'date-fns';
@@ -24,10 +25,12 @@ export default function CalendarNav() {
       <CalendarHeader
         currentDate={date()}
         view={state.viewMode}
+        weekStartsOn={state.weekStartsOn}
         onPrevious={() => shift(-1)}
         onNext={() => shift(1)}
         onToday={() => actions.setViewDate(new Date().toISOString())}
         onViewChange={actions.setViewMode}
+        onWeekStartChange={actions.setWeekStartsOn}
       />
       {/* <div class="flex items-center gap-2 p-2 border-b sticky top-0 bg-white/70 backdrop-blur z-10"> */}
       {/*   <div class="flex gap-1"> */}
@@ -67,10 +70,12 @@ export type CalendarView = 'month' | 'week' | 'day';
 interface CalendarHeaderProps {
   currentDate: Date;
   view: CalendarView;
+  weekStartsOn: WeekStartDay;
   onPrevious: () => void;
   onNext: () => void;
   onToday: () => void;
   onViewChange: (view: CalendarView) => void;
+  onWeekStartChange: (day: WeekStartDay) => void;
 }
 
 const VIEW_OPTIONS: { value: CalendarView; label: string; icon: string }[] = [
@@ -122,23 +127,46 @@ function CalendarHeader(props: CalendarHeaderProps) {
           </h1>
         </div>
 
-        {/* Right side - View switcher */}
-        <div class="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
-          <For each={VIEW_OPTIONS}>
-            {(option) => (
-              <button
-                onClick={() => props.onViewChange(option.value)}
-                class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${props.view === option.value
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
-                  }`}
-                title={option.label}
-              >
-                <span class="mr-1">{option.icon}</span>
-                <span class="hidden sm:inline">{option.label}</span>
-              </button>
-            )}
-          </For>
+        {/* Right side - View switcher and Settings */}
+        <div class="flex items-center space-x-3">
+          {/* Week Start Day Selector */}
+          <div class="flex items-center space-x-2">
+            <label for="week-start" class="text-sm font-medium text-gray-700 hidden sm:inline">
+              Week starts:
+            </label>
+            <select
+              id="week-start"
+              value={props.weekStartsOn}
+              onChange={(e) => props.onWeekStartChange(parseInt(e.target.value) as WeekStartDay)}
+              class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value={0}>Sunday</option>
+              <option value={1}>Monday</option>
+              <option value={2}>Tuesday</option>
+              <option value={3}>Wednesday</option>
+              <option value={4}>Thursday</option>
+              <option value={5}>Friday</option>
+              <option value={6}>Saturday</option>
+            </select>
+          </div>
+
+          <div class="flex items-center space-x-1 bg-gray-100 rounded-lg p-1">
+            <For each={VIEW_OPTIONS}>
+              {(option) => (
+                <button
+                  onClick={() => props.onViewChange(option.value)}
+                  class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${props.view === option.value
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                    }`}
+                  title={option.label}
+                >
+                  <span class="mr-1">{option.icon}</span>
+                  <span class="hidden sm:inline">{option.label}</span>
+                </button>
+              )}
+            </For>
+          </div>
         </div>
       </div>
     </div>

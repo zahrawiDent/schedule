@@ -1,7 +1,7 @@
 import { createContext, useContext, onCleanup } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { v4 as uuidv4 } from 'uuid'
-import type { EventItem, EventId, ViewMode, Filters } from '../types'
+import type { EventItem, EventId, ViewMode, Filters, WeekStartDay } from '../types'
 import { eventsCollection, migrateFromLegacyIfNeeded } from '../data/db'
 
 type State = {
@@ -9,6 +9,7 @@ type State = {
   viewDate: string // ISO date for current anchor day
   viewMode: ViewMode
   filters: Filters
+  weekStartsOn: WeekStartDay
 }
 
 type Ctx = [
@@ -20,6 +21,7 @@ type Ctx = [
     setViewDate(dateISO: string): void
     setViewMode(mode: ViewMode): void
     setFilters(f: Partial<Filters>): void
+    setWeekStartsOn(day: WeekStartDay): void
   }
 ]
 
@@ -29,8 +31,9 @@ export function EventsProvider(props: { children: any }) {
   const [state, setState] = createStore<State>({
     events: [],
     viewDate: new Date().toISOString(),
-  viewMode: 'week',
+    viewMode: 'week',
     filters: {},
+    weekStartsOn: 1, // Default to Monday
   })
 
   // initialize from TanStack DB and subscribe to live changes
@@ -68,6 +71,9 @@ export function EventsProvider(props: { children: any }) {
     },
     setFilters(f: Partial<Filters>) {
       setState('filters', (prev) => ({ ...prev, ...f }))
+    },
+    setWeekStartsOn(day: WeekStartDay) {
+      setState('weekStartsOn', day)
     },
   }
 

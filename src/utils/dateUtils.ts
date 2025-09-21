@@ -16,28 +16,34 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns'
+import type { WeekStartDay } from '../types'
 
 export const fmt = (d: Date | string, f = 'yyyy-MM-dd') => format(typeof d === 'string' ? parseISO(d) : d, f)
 export const toISO = (d: Date) => d.toISOString()
 export const fromISO = (s: string) => parseISO(s)
 
-export const startOfWeekISO = (d: Date) => startOfWeek(d, { weekStartsOn: 1 })
-export const endOfWeekISO = (d: Date) => endOfWeek(d, { weekStartsOn: 1 })
+export const startOfWeekISO = (d: Date, weekStartsOn: WeekStartDay = 1) => startOfWeek(d, { weekStartsOn })
+export const endOfWeekISO = (d: Date, weekStartsOn: WeekStartDay = 1) => endOfWeek(d, { weekStartsOn })
 
-export function monthGrid(date: Date) {
-  const start = startOfWeekISO(startOfMonth(date))
-  const end = endOfWeekISO(endOfMonth(date))
+export function monthGrid(date: Date, weekStartsOn: WeekStartDay = 1) {
+  const start = startOfWeekISO(startOfMonth(date), weekStartsOn)
+  const end = endOfWeekISO(endOfMonth(date), weekStartsOn)
   return eachDayOfInterval({ start, end })
 }
 
-export function weekRange(date: Date) {
-  const start = startOfWeekISO(date)
-  const end = endOfWeekISO(date)
+export function weekRange(date: Date, weekStartsOn: WeekStartDay = 1) {
+  const start = startOfWeekISO(date, weekStartsOn)
+  const end = endOfWeekISO(date, weekStartsOn)
   return eachDayOfInterval({ start, end })
 }
 
 export function dayRange(date: Date) {
   return eachDayOfInterval({ start: startOfDay(date), end: endOfDay(date) })
+}
+
+export function getWeekDayLabels(weekStartsOn: WeekStartDay = 1): string[] {
+  const allDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return [...allDays.slice(weekStartsOn), ...allDays.slice(0, weekStartsOn)]
 }
 
 export function mergeDateWithTime(date: Date, time: Date) {

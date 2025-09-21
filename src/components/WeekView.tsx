@@ -12,9 +12,9 @@ import { timesFromVerticalClick } from '../utils/slots'
 export default function WeekView(props: { onEventClick?: (id: string, patch?: Partial<import('../types').EventItem>) => void; onSlotClick?: (startISO: string, endISO: string) => void }) {
   const [state, actions] = useEvents()
   const anchor = () => parseISO(state.viewDate)
-  const days = () => weekRange(anchor())
-  const rangeStart = () => startOfWeek(anchor(), { weekStartsOn: 1 })
-  const rangeEnd = () => endOfWeek(anchor(), { weekStartsOn: 1 })
+  const days = () => weekRange(anchor(), state.weekStartsOn)
+  const rangeStart = () => startOfWeek(anchor(), { weekStartsOn: state.weekStartsOn })
+  const rangeEnd = () => endOfWeek(anchor(), { weekStartsOn: state.weekStartsOn })
   const occurrences = () => expandEventsForRange(state.events, rangeStart(), rangeEnd())
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
