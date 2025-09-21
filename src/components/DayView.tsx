@@ -55,8 +55,17 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
 
   // using shared withPointer from utils/pointer
 
+  let rightPaneRef: HTMLDivElement | null = null
+  const minsFromClientY = (clientY: number) => {
+    const el = rightPaneRef
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const y = clientY - rect.top
+    return y / (ROW_H / 60)
+  }
+
   return (
-    <TimeGrid anchor={anchor()}>
+  <TimeGrid anchor={anchor()} setRightPaneRef={(el) => (rightPaneRef = el)}>
         {/* collision-aware stacking: compute segments and lanes */}
         {(() => {
           const day = anchor()
@@ -112,15 +121,15 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
                   transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
                 }}
                 onClick={(id) => props.onEventClick?.(id, { start: e.start, end: e.end })}
-                onDragMove={(dyPx) => {
+                onDragMove={(_dyPx, ev: any) => {
                   if (!isStartSegment) return
-                  const deltaMin = dyPx / pxPerMin
-                  moveEvent(baseId, startMins + deltaMin)
+                  const mins = minsFromClientY(ev.clientY)
+                  moveEvent(baseId, mins)
                 }}
-                onResize={(dyPx) => {
+                onResize={(_dyPx, ev: any) => {
                   if (!isEndSegment) return
-                  const deltaMin = dyPx / pxPerMin
-                  resizeEvent(baseId, endMins + deltaMin)
+                  const mins = minsFromClientY(ev.clientY)
+                  resizeEvent(baseId, mins)
                 }}
                 onKeyDown={(ke: any) => {
                   if (ke.ctrlKey && (ke.key === 'ArrowUp' || ke.key === 'ArrowDown')) {
@@ -146,8 +155,8 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
           })
         })()}
   {/* slot overlay for click-to-add */}
-        <div
-          class="absolute inset-0 z-0"
+    <div
+        class="absolute inset-0 z-0"
           onClick={(ev) => {
             if (!props.onSlotClick) return
             const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
@@ -157,6 +166,6 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
           }}
         />
       
-    </TimeGrid>
+      </TimeGrid>
   )
 }

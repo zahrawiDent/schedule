@@ -29,6 +29,13 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
   // Track scroll containers per day and restore scroll positions after drop
   const scrollElMap = new Map<string, HTMLDivElement>()
   const scrollPos = new Map<string, number>()
+  const dayKey = (d: Date) => {
+    // Use local date key to avoid timezone offset issues
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
   onMount(() => {
     // Focus today's cell if present
     const todayISO = new Date().toISOString().slice(0, 10)
@@ -43,25 +50,107 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
 
   // No popover; all events are visible via scroll
 
+  // Track pointer position during drag to resolve drop via elementFromPoint
+  let lastPointer = { x: 0, y: 0 }
+  const onGlobalPointerMove = (e: PointerEvent) => {
+    lastPointer.x = (e as any).clientX
+    lastPointer.y = (e as any).clientY
+  }
+
+  // Auto-scroll while dragging near edges
+  let autoScrollRaf = 0
+  const AUTO_THRESH = 28 // px from edge to start auto-scroll
+  const MAX_SPEED = 16 // px per frame for inner lists
+  const MAX_WIN_SPEED = 20 // px per frame for window
+  const autoScrollTick = () => {
+    // Determine which day we're currently over
+    let dayKeyHit: string | undefined
+    try {
+      const el = document.elementFromPoint(lastPointer.x, lastPointer.y) as HTMLElement | null
+      const hit = el?.closest('[data-day-key]') as HTMLElement | null
+      dayKeyHit = hit?.getAttribute('data-day-key') || undefined
+    } catch {}
+
+    if (dayKeyHit) {
+      const scroller = scrollElMap.get(dayKeyHit)
+      if (scroller) {
+        const rect = scroller.getBoundingClientRect()
+        const dyTop = lastPointer.y - rect.top
+        const dyBottom = rect.bottom - lastPointer.y
+        let delta = 0
+        if (dyTop >= 0 && dyTop < AUTO_THRESH) {
+          const factor = (AUTO_THRESH - dyTop) / AUTO_THRESH
+          delta = -Math.ceil(factor * MAX_SPEED)
+        } else if (dyBottom >= 0 && dyBottom < AUTO_THRESH) {
+          const factor = (AUTO_THRESH - dyBottom) / AUTO_THRESH
+          delta = Math.ceil(factor * MAX_SPEED)
+        }
+        if (delta !== 0) {
+          scroller.scrollTop += delta
+        }
+      }
+    }
+
+    // Also auto-scroll the window if near viewport edges
+    const vh = window.innerHeight
+    const dyTopView = lastPointer.y
+    const dyBottomView = vh - lastPointer.y
+    let winDelta = 0
+    if (dyTopView < AUTO_THRESH) {
+      const factor = (AUTO_THRESH - dyTopView) / AUTO_THRESH
+      winDelta = -Math.ceil(factor * MAX_WIN_SPEED)
+    } else if (dyBottomView < AUTO_THRESH) {
+      const factor = (AUTO_THRESH - dyBottomView) / AUTO_THRESH
+      winDelta = Math.ceil(factor * MAX_WIN_SPEED)
+    }
+    if (winDelta !== 0) window.scrollBy(0, winDelta)
+
+    autoScrollRaf = window.requestAnimationFrame(autoScrollTick)
+  }
+  const startAutoScroll = () => {
+    if (autoScrollRaf) return
+    autoScrollRaf = window.requestAnimationFrame(autoScrollTick)
+  }
+  const stopAutoScroll = () => {
+    if (autoScrollRaf) {
+      window.cancelAnimationFrame(autoScrollRaf)
+      autoScrollRaf = 0
+    }
+  }
+
   function onDragEnd(ev: DragEvent) {
     const src = ev.draggable?.id as string | undefined
-    const dest = ev.droppable?.id as string | undefined
+    let dest = ev.droppable?.id as string | undefined
     // Clear active id regardless of valid drop
     setActiveDragId(null)
+    // Stop tracking pointer
+    window.removeEventListener('pointermove', onGlobalPointerMove)
+  stopAutoScroll()
+
+    // Resolve destination using the element under the actual pointer at drop time
+    try {
+      const el = document.elementFromPoint(lastPointer.x, lastPointer.y) as HTMLElement | null
+      const hit = el?.closest('[data-day-key]') as HTMLElement | null
+      const key = hit?.getAttribute('data-day-key') || undefined
+      if (key) dest = key
+    } catch {}
     if (!src || !dest) return
-    const targetDate = new Date(dest)
+  // Decode local date-only key
+  const [y, m, d] = (dest || '').split('-').map((n) => parseInt(n, 10))
+  if (!y || !m || !d) return
+  const targetDate = new Date(y, m - 1, d)
     const occ = visible().find((e) => (e.sourceId ?? e.id) === src)
     if (!occ) return
     // Skip moving expanded occurrences of recurring events for now
     if (occ.sourceId) return
 
     // Capture scroll positions for source and destination days before state update
-    const srcDayISO = startOfDay(parseISO(occ.start)).toISOString()
-    const destDayISO = startOfDay(targetDate).toISOString()
-    const srcEl = scrollElMap.get(srcDayISO)
-    const destEl = scrollElMap.get(destDayISO)
-    if (srcEl) scrollPos.set(srcDayISO, srcEl.scrollTop)
-    if (destEl) scrollPos.set(destDayISO, destEl.scrollTop)
+  const srcKey = dayKey(startOfDay(parseISO(occ.start)))
+  const destKey = dayKey(startOfDay(targetDate))
+  const srcEl = scrollElMap.get(srcKey)
+  const destEl = scrollElMap.get(destKey)
+  if (srcEl) scrollPos.set(srcKey, srcEl.scrollTop)
+  if (destEl) scrollPos.set(destKey, destEl.scrollTop)
 
     const start = parseISO(occ.start)
     const end = parseISO(occ.end)
@@ -72,10 +161,10 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
 
     // Restore scroll positions on next frame after DOM updates
     requestAnimationFrame(() => {
-      const sEl = scrollElMap.get(srcDayISO)
-      const dEl = scrollElMap.get(destDayISO)
-      const sTop = scrollPos.get(srcDayISO)
-      const dTop = scrollPos.get(destDayISO)
+      const sEl = scrollElMap.get(srcKey)
+      const dEl = scrollElMap.get(destKey)
+      const sTop = scrollPos.get(srcKey)
+      const dTop = scrollPos.get(destKey)
       if (sEl != null && sTop != null) sEl.scrollTop = sTop
       if (dEl != null && dTop != null) dEl.scrollTop = dTop
     })
@@ -87,6 +176,9 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
       onDragStart={(ev) => {
         const id = ev.draggable?.id as string | undefined
         if (id) setActiveDragId(id)
+  // Begin tracking pointer position during drag
+  window.addEventListener('pointermove', onGlobalPointerMove)
+  startAutoScroll()
       }}
       onDragEnd={onDragEnd}
     >
@@ -110,7 +202,7 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
             isWithinInterval(d, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) })
           )
           return (
-            <MonthDroppable id={d.toISOString()}>
+            <MonthDroppable id={dayKey(d)}>
 
               {/* <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50"> */}
               {/* </div> */}
@@ -121,7 +213,7 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 setRef={(el) => (cellRefs[i] = el)}
                 isLastInRow={(i + 1) % 7 === 0}
                 setScrollRef={(el) => {
-                  if (el) scrollElMap.set(startOfDay(d).toISOString(), el)
+                  if (el) scrollElMap.set(dayKey(startOfDay(d)), el)
                 }}
                 onDayClick={() => {
                   if (!props.onDayClick) return
@@ -209,7 +301,7 @@ function MonthDraggable(props: { id: string; children: any; onEventClick?: (id: 
 function MonthDroppable(props: { id: string; children: any }) {
   const droppable = createDroppable(props.id)
   return (
-    <div use:droppable={droppable} class="overflow-visible">{props.children}</div>
+  <div use:droppable={droppable} class="overflow-visible" data-day-key={props.id}>{props.children}</div>
   )
 }
 

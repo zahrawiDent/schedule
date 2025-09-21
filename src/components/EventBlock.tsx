@@ -27,7 +27,7 @@ export default function EventBlock(props: EventBlockProps) {
   let didDrag = false
   return (
     <div
-      class={`absolute rounded-lg shadow-sm border border-white/20 text-white z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none ${props.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
+  class={`absolute rounded-lg shadow-sm border border-white/20 text-white z-20 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none touch-none ${props.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       style={{
         ...props.style,
         'background': `linear-gradient(135deg, ${props.color ?? '#2563eb'} 0%, ${adjustColorBrightness(props.color ?? '#2563eb', -20)} 100%)`,
@@ -46,6 +46,7 @@ export default function EventBlock(props: EventBlockProps) {
         if (!props.draggable) return
         // Start drag from anywhere in the block
         pe.stopPropagation()
+        try { (pe as any).preventDefault?.() } catch {}
         if (props.onDragMove2D) {
           withPointer2D((dx, dy, ev) => {
             if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true

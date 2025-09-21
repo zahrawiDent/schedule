@@ -97,8 +97,16 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
     return nearest
   }
 
+  const minsFromClientYInDay = (clientY: number, dayIndex: number) => {
+    const el = columnEls[dayIndex]
+    if (!el) return 0
+    const rect = el.getBoundingClientRect()
+    const y = clientY - rect.top
+    return y / pxPerMin
+  }
+
   return (
-    <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
+  <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
       {/* header */}
       <div class="bg-white border-b border-gray-200"></div>
       {days().map((d, i) => (
@@ -117,7 +125,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
       </div>
 
       {/* 7 day columns */}
-      {days().map((d, i) => {
+  {days().map((d, i) => {
         // Include events that overlap this day, not just those starting today
         const dayStart = sod(d)
         const dayEnd = eod(d)
@@ -224,19 +232,17 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     if (ke.key === 'ArrowRight' && isEndSegment) { resizeEventTo(id, i, enM + SNAP_MIN); ke.preventDefault(); }
                   }}
                   setRef={(el) => blockRefs.push(el)}
-                  onDragMove2D={(_dxPx, dyPx, ev) => {
+                  onDragMove2D={(_dxPx, _dyPx, ev: any) => {
                     if (!isStartSegment) return
-                    const startAt = (parseISO(e.start).getHours() * 60 + parseISO(e.start).getMinutes())
-                    const dayIdx = getDayIndexFromClientX((ev as any).clientX)
-                    const deltaMin = dyPx / pxPerMin
-                    moveEventTo(id, dayIdx ?? i, startAt + deltaMin)
+                    const dayIdx = getDayIndexFromClientX(ev.clientX)
+                    const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
+                    moveEventTo(id, dayIdx ?? i, mins)
                   }}
-                  onResize={(_dyPx, ev) => {
+                  onResize={(_dyPx, ev: any) => {
                     if (!isEndSegment) return
-                    const endAtAbs = parseISO(e.end)
-                    const dayIdx = getDayIndexFromClientX((ev as any).clientX)
-                    const minsInDay = snap(Math.max(0, Math.min(24 * 60, (endAtAbs.getHours() * 60 + endAtAbs.getMinutes()) + (_dyPx / pxPerMin))))
-                    resizeEventTo(id, dayIdx, minsInDay)
+                    const dayIdx = getDayIndexFromClientX(ev.clientX)
+                    const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
+                    resizeEventTo(id, dayIdx, mins)
                   }}
                 />
               )

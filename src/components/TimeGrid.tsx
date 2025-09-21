@@ -7,7 +7,7 @@ import { addHours, format, startOfDay } from 'date-fns'
  * Generic single-day time grid with a left labels column and a right absolute grid for events.
  * Provide children positioned absolutely inside the right panel (24h tall).
  */
-export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; children: JSX.Element }) {
+export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; children: JSX.Element; setRightPaneRef?: (el: HTMLDivElement | null) => void }) {
   const left = props.leftColWidth ?? 60
   const [hoverMins, setHoverMins] = createSignal<number | null>(null)
   return (
@@ -22,6 +22,7 @@ export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; c
       <div
         class="relative bg-white border-b border-gray-200"
         style={{ height: `${ROW_H * 24}px` }}
+        ref={props.setRightPaneRef}
         onMouseMove={(ev) => {
           const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
           // Don't show hover indicator when over an event block
