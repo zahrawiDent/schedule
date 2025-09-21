@@ -1,7 +1,7 @@
 import type { JSX } from 'solid-js';
-import { createSignal } from 'solid-js'
+import { createSignal, onCleanup } from 'solid-js'
 import { HOURS, ROW_H, SNAP_MIN } from '../utils/timeGrid'
-import { addHours, format, startOfDay } from 'date-fns'
+import { addHours, format, startOfDay, isSameDay } from 'date-fns'
 
 /**
  * Generic single-day time grid with a left labels column and a right absolute grid for events.
@@ -10,6 +10,21 @@ import { addHours, format, startOfDay } from 'date-fns'
 export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; children: JSX.Element; setRightPaneRef?: (el: HTMLDivElement | null) => void }) {
   const left = props.leftColWidth ?? 60
   const [hoverMins, setHoverMins] = createSignal<number | null>(null)
+  const [nowMins, setNowMins] = createSignal<number | null>(null)
+
+  // Live "now" line for today
+  const updateNow = () => {
+    const now = new Date()
+    if (isSameDay(now, props.anchor)) {
+      const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+      setNowMins(mins)
+    } else {
+      setNowMins(null)
+    }
+  }
+  updateNow()
+  const timer = window.setInterval(updateNow, 30_000)
+  onCleanup(() => window.clearInterval(timer))
   return (
     <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': `${left}px 1fr` }}>
       <div class="bg-white border-b border-gray-200"></div>
@@ -41,6 +56,19 @@ export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; c
             <div class="absolute left-0 right-0 border-b border-gray-200" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
           ) : null
         ))}
+        {/* now indicator (today only) */}
+        {nowMins() !== null && (
+          <>
+            <div
+              class="absolute left-0 right-0 h-px bg-red-500 z-30 pointer-events-none"
+              style={{ top: `${(nowMins()! * (ROW_H / 60))}px` }}
+            />
+            <div
+              class="absolute w-2 h-2 bg-red-500 rounded-full -translate-y-1/2 z-30 pointer-events-none"
+              style={{ top: `${(nowMins()! * (ROW_H / 60))}px`, left: '0.25rem' }}
+            />
+          </>
+        )}
         {/* hover indicator */}
         {hoverMins() !== null && (
           <>

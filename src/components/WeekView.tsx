@@ -1,5 +1,5 @@
-import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod } from 'date-fns'
-import { createSignal } from 'solid-js'
+import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod, isToday } from 'date-fns'
+import { createSignal, onCleanup } from 'solid-js'
 import { weekRange } from '../utils/dateUtils'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
@@ -20,6 +20,22 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
   const pxPerMin = pxPerMinute()
+  const [nowMins, setNowMins] = createSignal<number | null>(null)
+  const [todayIdx, setTodayIdx] = createSignal<number | null>(null)
+  const updateNow = () => {
+    const now = new Date()
+    if (now >= rangeStart() && now <= rangeEnd()) {
+      setNowMins(now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60)
+      const idx = days().findIndex((d) => isToday(d))
+      setTodayIdx(idx >= 0 ? idx : null)
+    } else {
+      setNowMins(null)
+      setTodayIdx(null)
+    }
+  }
+  updateNow()
+  const timer = window.setInterval(updateNow, 30_000)
+  onCleanup(() => window.clearInterval(timer))
 
   // Hover indicator (snapped to 15 min)
   const [hover, setHover] = createSignal<{ dayIndex: number, mins: number } | null>(null)
@@ -136,9 +152,9 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
       {/* header */}
       <div class="bg-white border-b border-gray-200"></div>
-      {days().map((d, i) => (
+    {days().map((d, i) => (
         <div
-          class={`bg-white p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''}`}
+      class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''} ${isToday(d) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
         >
           {format(d, 'EEE dd')}
         </div>
@@ -188,6 +204,10 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 <div class="absolute left-0 right-0 border-b border-gray-200" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
               ) : null
             ))}
+            {/* today background */}
+            {isToday(d) && (
+              <div class="absolute inset-0 bg-blue-50/40 pointer-events-none" />
+            )}
             {/* hover indicator */}
             {hover()?.dayIndex === i && (
               <>
@@ -207,6 +227,19 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     return format(day, 'h:mm')
                   })()}
                 </div>
+              </>
+            )}
+            {/* current time line in today's column */}
+            {todayIdx() === i && nowMins() !== null && (
+              <>
+                <div
+                  class="absolute left-0 right-0 h-px bg-red-500 z-30 pointer-events-none"
+                  style={{ top: `${(nowMins()! * pxPerMin)}px` }}
+                />
+                <div
+                  class="absolute w-2 h-2 bg-red-500 rounded-full -translate-y-1/2 z-30 pointer-events-none"
+                  style={{ top: `${(nowMins()! * pxPerMin)}px`, left: '0.25rem' }}
+                />
               </>
             )}
             {/* events */}
