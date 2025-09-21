@@ -23,15 +23,46 @@ export type EventBlockProps = {
 export default function EventBlock(props: EventBlockProps) {
   const s = parseISO(props.startISO)
   const e = parseISO(props.endISO)
+  // Track if a drag occurred to suppress click
+  let didDrag = false
   return (
     <div
-      class="absolute rounded-lg shadow-sm border border-white/20 text-white cursor-pointer z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none"
+      class={`absolute rounded-lg shadow-sm border border-white/20 text-white z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none ${props.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       style={{
         ...props.style,
         'background': `linear-gradient(135deg, ${props.color ?? '#2563eb'} 0%, ${adjustColorBrightness(props.color ?? '#2563eb', -20)} 100%)`,
         'min-height': '24px'
       }}
-      onClick={(ce) => { ce.stopPropagation(); props.onClick?.(props.id) }}
+      onClick={(ce) => {
+        ce.stopPropagation()
+        if (didDrag) {
+          // suppress click after a drag
+          didDrag = false
+          return
+        }
+        props.onClick?.(props.id)
+      }}
+      onPointerDown={(pe) => {
+        if (!props.draggable) return
+        // Start drag from anywhere in the block
+        pe.stopPropagation()
+        if (props.onDragMove2D) {
+          withPointer2D((dx, dy, ev) => {
+            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true
+            props.onDragMove2D!(dx, dy, ev)
+          }, () => {
+            // delay reset so click handler can see didDrag
+            setTimeout(() => (didDrag = false), 0)
+          })(pe as any)
+        } else if (props.onDragMove) {
+          withPointer((dy, ev) => {
+            if (Math.abs(dy) > 2) didDrag = true
+            props.onDragMove!(dy, ev)
+          }, () => {
+            setTimeout(() => (didDrag = false), 0)
+          })(pe as any)
+        }
+      }}
       tabindex={props.tabIndex as any}
       onKeyDown={props.onKeyDown as any}
       onFocus={props.onFocus as any}
@@ -39,23 +70,7 @@ export default function EventBlock(props: EventBlockProps) {
       data-evid={props.id}
       title={`${props.title}\n${format(s, 'p')} – ${format(e, 'p')}`}
     >
-      {props.draggable && (
-        <div
-          class="absolute top-1 left-1 w-5 h-5 flex items-center justify-center rounded bg-black/20 text-white cursor-grab active:cursor-grabbing select-none"
-          title="Drag to move"
-          onPointerDown={(pe) => {
-            pe.stopPropagation()
-            if (props.onDragMove2D) {
-              withPointer2D((dx, dy, ev) => props.onDragMove2D!(dx, dy, ev))(pe as any)
-            } else if (props.onDragMove) {
-              withPointer((dy, ev) => props.onDragMove!(dy, ev))(pe as any)
-            }
-          }}
-        >
-          
-        </div>
-      )}
-      <div class="px-2 py-1 pl-8">
+      <div class="px-2 py-1">
         <div class="font-semibold truncate">{props.title}</div>
         <div class="opacity-90 truncate">{format(s, 'p')} – {format(e, 'p')}</div>
       </div>
