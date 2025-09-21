@@ -66,8 +66,8 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
 
         {/* Day labels */}
         <For each={WEEK_DAYS}>
-          {(day) => (
-            <div class="p-3 text-center text-sm font-medium text-gray-500 border-r border-b border-gray-200 last:border-r-0">
+          {(day, index) => (
+            <div class={`p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200 ${index() === WEEK_DAYS.length - 1 ? '' : 'border-r'}`}>
               {day}
             </div>
           )}
@@ -88,6 +88,7 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 inMonth={inMonth(d, anchor())}
                 tabIndex={focusIdx() === i ? 0 : -1}
                 setRef={(el) => (cellRefs[i] = el)}
+                isLastInRow={(i + 1) % 7 === 0}
                 onDayClick={() => {
                   if (!props.onDayClick) return
                   const { startISO, endISO } = defaultMonthClickTimes(d)

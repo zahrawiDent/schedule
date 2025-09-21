@@ -16,6 +16,7 @@ export default function MonthCell(props: {
   childrenEvents: JSX.Element
   moreCount?: number
   onMoreClick?: () => void
+  isLastInRow?: boolean
 }) {
   // is day is today
   const isToday = () => format(props.date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
@@ -25,7 +26,7 @@ export default function MonthCell(props: {
       tabindex={props.tabIndex}
       ref={props.setRef}
       class={`
-        border-r border-b border-gray-200 last:border-r-0 
+        border-b border-gray-200 ${props.isLastInRow ? '' : 'border-r'}
         cursor-pointer min-h-28 bg-white p-2
         flex flex-col relative outline-none 
         ${props.inMonth ? '' : 'opacity-50'}`}
