@@ -50,24 +50,39 @@ export default function EventBlock(props: EventBlockProps) {
         if (!props.draggable) return
         // Start drag from anywhere in the block
         pe.stopPropagation()
-        try { (pe as any).preventDefault?.() } catch {}
-    props.onDragStart?.()
+        let started = false
     if (props.onDragMove2D) {
           withPointer2D((dx, dy, ev) => {
-            if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true
+            if (!started) {
+              if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+                didDrag = true
+                started = true
+                props.onDragStart?.()
+              } else {
+                return
+              }
+            }
             props.onDragMove2D!(dx, dy, ev)
           }, () => {
             // delay reset so click handler can see didDrag
             setTimeout(() => (didDrag = false), 0)
-      props.onDragEnd?.()
+            if (started) props.onDragEnd?.()
           })(pe as any)
         } else if (props.onDragMove) {
           withPointer((dy, ev) => {
-            if (Math.abs(dy) > 2) didDrag = true
+            if (!started) {
+              if (Math.abs(dy) > 2) {
+                didDrag = true
+                started = true
+                props.onDragStart?.()
+              } else {
+                return
+              }
+            }
             props.onDragMove!(dy, ev)
           }, () => {
             setTimeout(() => (didDrag = false), 0)
-      props.onDragEnd?.()
+            if (started) props.onDragEnd?.()
           })(pe as any)
         }
       }}
