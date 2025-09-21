@@ -1,4 +1,5 @@
 import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod } from 'date-fns'
+import { createSignal } from 'solid-js'
 import { weekRange } from '../utils/dateUtils'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
@@ -19,6 +20,9 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
   const pxPerMin = pxPerMinute()
+
+  // Hover indicator (snapped to 15 min)
+  const [hover, setHover] = createSignal<{ dayIndex: number, mins: number } | null>(null)
 
   function snap(mins: number) {
     return Math.round(mins / SNAP_MIN) * SNAP_MIN
@@ -140,6 +144,27 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 <div class="absolute left-0 right-0 border-b border-gray-200" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
               ) : null
             ))}
+            {/* hover indicator */}
+            {hover()?.dayIndex === i && (
+              <>
+                <div
+                  class="absolute left-0 right-0 h-px bg-blue-500/30 z-20 pointer-events-none"
+                  style={{ top: `${(hover()!.mins) * pxPerMin}px` }}
+                />
+                <div
+                  class="absolute left-1 -translate-y-1/2 z-20 pointer-events-none text-[10px] px-1.5 py-0.5 rounded border bg-white/80 backdrop-blur-sm text-gray-700 border-gray-200 shadow-sm"
+                  style={{ top: `${(hover()!.mins) * pxPerMin}px` }}
+                >
+                  {(() => {
+                    const day = new Date(rangeStart())
+                    day.setDate(rangeStart().getDate() + i)
+                    day.setHours(0, 0, 0, 0)
+                    day.setMinutes(hover()!.mins)
+                    return format(day, 'h:mm')
+                  })()}
+                </div>
+              </>
+            )}
             {/* events */}
             {sorted.map(({ data }) => {
               const { e, id, startMins, endMins } = data
@@ -212,6 +237,17 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 const { startISO, endISO } = timesFromVerticalClick(day, y, pxPerMin)
                 props.onSlotClick(startISO, endISO)
               }}
+              onMouseMove={(ev) => {
+                const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
+                // Don't show hover when over an EventBlock
+                const tgt = ev.target as HTMLElement
+                if (tgt && tgt.closest('[data-evid]')) { setHover(null); return }
+                const y = (ev as any).clientY - rect.top
+                const minsRaw = y / pxPerMin
+                const mins = Math.max(0, Math.min(24 * 60 - SNAP_MIN, snap(minsRaw)))
+                setHover({ dayIndex: i, mins })
+              }}
+              onMouseLeave={() => setHover(null)}
             />
           </div>
         )
