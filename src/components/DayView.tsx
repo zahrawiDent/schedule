@@ -64,6 +64,33 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
     return y / (ROW_H / 60)
   }
 
+  // Auto-scroll near viewport edges while dragging/resizing
+  let autoRaf = 0
+  const EDGE = 28
+  const WIN_SPEED = 20
+  const ptr = { x: 0, y: 0 }
+  const onPtrMove = (e: PointerEvent) => { ptr.x = (e as any).clientX; ptr.y = (e as any).clientY }
+  const tick = () => {
+    const yTop = ptr.y
+    const yBottom = window.innerHeight - ptr.y
+    let delta = 0
+    if (yTop < EDGE) delta = -Math.ceil(((EDGE - yTop) / EDGE) * WIN_SPEED)
+    else if (yBottom < EDGE) delta = Math.ceil(((EDGE - yBottom) / EDGE) * WIN_SPEED)
+    if (delta !== 0) window.scrollBy(0, delta)
+    autoRaf = window.requestAnimationFrame(tick)
+  }
+  const startAuto = () => {
+    if (autoRaf) return
+    window.addEventListener('pointermove', onPtrMove)
+    autoRaf = window.requestAnimationFrame(tick)
+  }
+  const stopAuto = () => {
+    if (!autoRaf) return
+    window.cancelAnimationFrame(autoRaf)
+    autoRaf = 0
+    window.removeEventListener('pointermove', onPtrMove)
+  }
+
   return (
   <TimeGrid anchor={anchor()} setRightPaneRef={(el) => (rightPaneRef = el)}>
         {/* collision-aware stacking: compute segments and lanes */}
@@ -126,11 +153,15 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
                   const mins = minsFromClientY(ev.clientY)
                   moveEvent(baseId, mins)
                 }}
+                onDragStart={() => startAuto()}
+                onDragEnd={() => stopAuto()}
                 onResize={(_dyPx, ev: any) => {
                   if (!isEndSegment) return
                   const mins = minsFromClientY(ev.clientY)
                   resizeEvent(baseId, mins)
                 }}
+                onResizeStart={() => startAuto()}
+                onResizeEnd={() => stopAuto()}
                 onKeyDown={(ke: any) => {
                   if (ke.ctrlKey && (ke.key === 'ArrowUp' || ke.key === 'ArrowDown')) {
                     focusNeighbor(id, ke.key === 'ArrowUp' ? -1 : 1)

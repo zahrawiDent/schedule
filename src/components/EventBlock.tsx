@@ -14,6 +14,10 @@ export type EventBlockProps = {
   onDragMove?: (dyPx: number, ev: PointerEvent) => void
   onDragMove2D?: (dxPx: number, dyPx: number, ev: PointerEvent) => void
   onResize?: (dyPx: number, ev: PointerEvent) => void
+  onDragStart?: () => void
+  onDragEnd?: () => void
+  onResizeStart?: () => void
+  onResizeEnd?: () => void
   tabIndex?: number
   onKeyDown?: (ev: KeyboardEvent) => void
   onFocus?: (ev: FocusEvent) => void
@@ -47,13 +51,15 @@ export default function EventBlock(props: EventBlockProps) {
         // Start drag from anywhere in the block
         pe.stopPropagation()
         try { (pe as any).preventDefault?.() } catch {}
-        if (props.onDragMove2D) {
+    props.onDragStart?.()
+    if (props.onDragMove2D) {
           withPointer2D((dx, dy, ev) => {
             if (Math.abs(dx) > 2 || Math.abs(dy) > 2) didDrag = true
             props.onDragMove2D!(dx, dy, ev)
           }, () => {
             // delay reset so click handler can see didDrag
             setTimeout(() => (didDrag = false), 0)
+      props.onDragEnd?.()
           })(pe as any)
         } else if (props.onDragMove) {
           withPointer((dy, ev) => {
@@ -61,6 +67,7 @@ export default function EventBlock(props: EventBlockProps) {
             props.onDragMove!(dy, ev)
           }, () => {
             setTimeout(() => (didDrag = false), 0)
+      props.onDragEnd?.()
           })(pe as any)
         }
       }}
@@ -81,7 +88,8 @@ export default function EventBlock(props: EventBlockProps) {
           title="Drag to resize"
           onPointerDown={(pe) => {
             pe.stopPropagation()
-            withPointer((dy, ev) => props.onResize?.(dy, ev))(pe as any)
+            props.onResizeStart?.()
+            withPointer((dy, ev) => props.onResize?.(dy, ev), () => props.onResizeEnd?.())(pe as any)
           }}
         />
       )}

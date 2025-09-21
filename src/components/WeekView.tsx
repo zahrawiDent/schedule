@@ -105,6 +105,33 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
     return y / pxPerMin
   }
 
+  // Auto-scroll near viewport edges while dragging/resizing
+  let autoRaf = 0
+  const EDGE = 28
+  const WIN_SPEED = 20
+  const ptr = { x: 0, y: 0 }
+  const onPtrMove = (e: PointerEvent) => { ptr.x = (e as any).clientX; ptr.y = (e as any).clientY }
+  const tick = () => {
+    const yTop = ptr.y
+    const yBottom = window.innerHeight - ptr.y
+    let delta = 0
+    if (yTop < EDGE) delta = -Math.ceil(((EDGE - yTop) / EDGE) * WIN_SPEED)
+    else if (yBottom < EDGE) delta = Math.ceil(((EDGE - yBottom) / EDGE) * WIN_SPEED)
+    if (delta !== 0) window.scrollBy(0, delta)
+    autoRaf = window.requestAnimationFrame(tick)
+  }
+  const startAuto = () => {
+    if (autoRaf) return
+    window.addEventListener('pointermove', onPtrMove)
+    autoRaf = window.requestAnimationFrame(tick)
+  }
+  const stopAuto = () => {
+    if (!autoRaf) return
+    window.cancelAnimationFrame(autoRaf)
+    autoRaf = 0
+    window.removeEventListener('pointermove', onPtrMove)
+  }
+
   return (
   <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
       {/* header */}
@@ -238,12 +265,16 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
                     moveEventTo(id, dayIdx ?? i, mins)
                   }}
+                  onDragStart={() => startAuto()}
+                  onDragEnd={() => stopAuto()}
                   onResize={(_dyPx, ev: any) => {
                     if (!isEndSegment) return
                     const dayIdx = getDayIndexFromClientX(ev.clientX)
                     const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
                     resizeEventTo(id, dayIdx, mins)
                   }}
+                  onResizeStart={() => startAuto()}
+                  onResizeEnd={() => stopAuto()}
                 />
               )
             })}
