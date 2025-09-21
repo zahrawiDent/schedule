@@ -115,11 +115,15 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
                 childrenEvents={(
                   <>
                     {dayEvents.slice(0, 4).map((e) => (
-                      <MonthDraggable id={e.sourceId ?? e.id}>
+                      <MonthDraggable 
+                        id={e.sourceId ?? e.id}
+                        onEventClick={props.onEventClick}
+                        start={e.start}
+                        end={e.end}
+                      >
                         <MonthPill
                           title={e.title}
                           color={e.color}
-                          onActivate={() => props.onEventClick?.(e.sourceId ?? e.id, { start: e.start, end: e.end })}
                         />
                       </MonthDraggable>
                     ))}
@@ -150,10 +154,22 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
   )
 }
 
-function MonthDraggable(props: { id: string; children: any }) {
+function MonthDraggable(props: { id: string; children: any; onEventClick?: (id: string, patch?: Partial<EventItem>) => void; start: string; end: string }) {
   const draggable = createDraggable(props.id)
   return (
-    <div use:draggable={draggable} class="relative z-20">{props.children}</div>
+    <div 
+      use:draggable={draggable} 
+      class="relative z-20"
+      onClick={(e) => {
+        // Only trigger click if it's not a drag operation
+        if (!e.defaultPrevented) {
+          e.stopPropagation();
+          props.onEventClick?.(props.id, { start: props.start, end: props.end });
+        }
+      }}
+    >
+      {props.children}
+    </div>
   )
 }
 
