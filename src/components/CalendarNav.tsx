@@ -20,71 +20,11 @@ export default function CalendarNav() {
     actions.setViewDate(next.toISOString())
   }
 
-  return (
-    <div>
-      <CalendarHeader
-        currentDate={date()}
-        view={state.viewMode}
-        weekStartsOn={state.weekStartsOn}
-        onPrevious={() => shift(-1)}
-        onNext={() => shift(1)}
-        onToday={() => actions.setViewDate(new Date().toISOString())}
-        onViewChange={actions.setViewMode}
-        onWeekStartChange={actions.setWeekStartsOn}
-      />
-      {/* <div class="flex items-center gap-2 p-2 border-b sticky top-0 bg-white/70 backdrop-blur z-10"> */}
-      {/*   <div class="flex gap-1"> */}
-      {/*     <button class="px-2 py-1 rounded border" onClick={() => shift(-1)} aria-label="Previous"> */}
-      {/*       ‹ */}
-      {/*     </button> */}
-      {/*     <button class="px-2 py-1 rounded border" onClick={() => actions.setViewDate(new Date().toISOString())}> */}
-      {/*       Today */}
-      {/*     </button> */}
-      {/*     <button class="px-2 py-1 rounded border" onClick={() => shift(1)} aria-label="Next"> */}
-      {/*       › */}
-      {/*     </button> */}
-      {/*   </div> */}
-      {/*   <div class="font-semibold text-lg"> */}
-      {/*     {format(date(), state.viewMode === 'month' ? 'MMMM yyyy' : state.viewMode === 'week' ? 'wo, yyyy' : 'PPP')} */}
-      {/*   </div> */}
-      {/*   <div class="ml-auto flex gap-1" role="tablist" aria-label="Calendar views"> */}
-      {/*     {(['month', 'week', 'day'] as ViewMode[]).map((m) => ( */}
-      {/*       <button */}
-      {/*         role="tab" */}
-      {/*         aria-selected={state.viewMode === m} */}
-      {/*         class={`px-3 py-1 rounded border ${state.viewMode === m ? 'bg-blue-600 text-white' : ''}`} */}
-      {/*         onClick={() => actions.setViewMode(m)} */}
-      {/*       > */}
-      {/*         {m} */}
-      {/*       </button> */}
-      {/*     ))} */}
-      {/*   </div> */}
-      {/* </div> */}
-    </div>
-  )
-}
-
-
-export type CalendarView = 'month' | 'week' | 'day';
-
-interface CalendarHeaderProps {
-  currentDate: Date;
-  view: CalendarView;
-  weekStartsOn: WeekStartDay;
-  onPrevious: () => void;
-  onNext: () => void;
-  onToday: () => void;
-  onViewChange: (view: CalendarView) => void;
-  onWeekStartChange: (day: WeekStartDay) => void;
-}
-
-const VIEW_OPTIONS: { value: CalendarView; label: string; icon: string }[] = [
-  { value: 'month', label: 'Month', icon: '📅' },
-  { value: 'week', label: 'Week', icon: '📆' },
-  { value: 'day', label: 'Day', icon: '📋' }
-];
-
-function CalendarHeader(props: CalendarHeaderProps) {
+  const VIEW_OPTIONS: { value: typeof state.viewMode; label: string; icon: string }[] = [
+    { value: 'month', label: 'Month', icon: '📅' },
+    { value: 'week', label: 'Week', icon: '📆' },
+    { value: 'day', label: 'Day', icon: '📋' }
+  ];
 
   return (
     <div class="bg-white border-b border-gray-200 px-4 py-3">
@@ -92,7 +32,7 @@ function CalendarHeader(props: CalendarHeaderProps) {
         {/* Left side - Navigation */}
         <div class="flex items-center space-x-4">
           <button
-            onClick={props.onPrevious}
+            onClick={() => shift(-1)}
             class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             title="Previous"
           >
@@ -102,7 +42,7 @@ function CalendarHeader(props: CalendarHeaderProps) {
           </button>
 
           <button
-            onClick={props.onNext}
+            onClick={() => shift(1)}
             class="p-2 rounded-lg hover:bg-gray-100 transition-colors"
             title="Next"
           >
@@ -112,7 +52,7 @@ function CalendarHeader(props: CalendarHeaderProps) {
           </button>
 
           <button
-            onClick={props.onToday}
+            onClick={() => actions.setViewDate(new Date().toISOString())}
             class="px-3 py-1.5 text-sm font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
           >
             Today
@@ -122,12 +62,11 @@ function CalendarHeader(props: CalendarHeaderProps) {
         {/* Center - Date display */}
         <div class="flex-1 text-center">
           <h1 class="text-xl font-semibold text-gray-900">
-            {/* {formatDate(props.currentDate, props.view)} */}
-            {format(props.currentDate, props.view === 'month' ? 'MMMM yyyy' : props.view === 'week' ? 'wo, yyyy' : 'EEE, MMMM d, yyyy')}
+            {format(date(), state.viewMode === 'month' ? 'MMMM yyyy' : state.viewMode === 'week' ? 'wo, yyyy' : 'EEE, MMMM d, yyyy')}
           </h1>
         </div>
 
-        {/* Right side - View switcher and Settings */}
+        {/* Right side - Week Start Day Selector and View switcher */}
         <div class="flex items-center space-x-3">
           {/* Week Start Day Selector */}
           <div class="flex items-center space-x-2">
@@ -136,8 +75,8 @@ function CalendarHeader(props: CalendarHeaderProps) {
             </label>
             <select
               id="week-start"
-              value={props.weekStartsOn}
-              onChange={(e) => props.onWeekStartChange(parseInt(e.target.value) as WeekStartDay)}
+              value={state.weekStartsOn}
+              onChange={(e) => actions.setWeekStartsOn(parseInt(e.target.value) as WeekStartDay)}
               class="text-sm border border-gray-300 rounded-md px-2 py-1 bg-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             >
               <option value={0}>Sunday</option>
@@ -154,8 +93,8 @@ function CalendarHeader(props: CalendarHeaderProps) {
             <For each={VIEW_OPTIONS}>
               {(option) => (
                 <button
-                  onClick={() => props.onViewChange(option.value)}
-                  class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${props.view === option.value
+                  onClick={() => actions.setViewMode(option.value)}
+                  class={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${state.viewMode === option.value
                     ? 'bg-white text-gray-900 shadow-sm'
                     : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
                     }`}
@@ -170,27 +109,5 @@ function CalendarHeader(props: CalendarHeaderProps) {
         </div>
       </div>
     </div>
-  );
+  )
 }
-
-// const formatDate = (date: Date, view: CalendarView): string => {
-//   switch (view) {
-//     case 'month':
-//       return format(date, 'MMMM yyyy');
-//     case 'week':
-//       const startOfWeek = new Date(date);
-//       startOfWeek.setDate(date.getDate() - date.getDay());
-//       const endOfWeek = new Date(startOfWeek);
-//       endOfWeek.setDate(startOfWeek.getDate() + 6);
-//
-//       if (startOfWeek.getMonth() === endOfWeek.getMonth()) {
-//         return `${format(startOfWeek, 'MMM d')} - ${format(endOfWeek, 'd, yyyy')}`;
-//       } else {
-//         return `${format(startOfWeek, 'MMM d')} - ${format(endOfWeek, 'MMM d, yyyy')}`;
-//       }
-//     case 'day':
-//       return format(date, 'EEEE, MMMM d, yyyy');
-//     default:
-//       return format(date, 'MMMM yyyy');
-//   }
-// };

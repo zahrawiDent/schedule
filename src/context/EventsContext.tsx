@@ -27,13 +27,39 @@ type Ctx = [
 
 const EventsCtx = createContext<Ctx>()
 
+// Helper functions for localStorage
+const WEEK_START_KEY = 'calendar-week-starts-on'
+
+function loadWeekStartFromStorage(): WeekStartDay {
+  try {
+    const stored = localStorage.getItem(WEEK_START_KEY)
+    if (stored !== null) {
+      const parsed = parseInt(stored, 10)
+      if (parsed >= 0 && parsed <= 6) {
+        return parsed as WeekStartDay
+      }
+    }
+  } catch (error) {
+    console.warn('Failed to load week start preference from localStorage:', error)
+  }
+  return 1 // Default to Monday
+}
+
+function saveWeekStartToStorage(day: WeekStartDay): void {
+  try {
+    localStorage.setItem(WEEK_START_KEY, day.toString())
+  } catch (error) {
+    console.warn('Failed to save week start preference to localStorage:', error)
+  }
+}
+
 export function EventsProvider(props: { children: any }) {
   const [state, setState] = createStore<State>({
     events: [],
     viewDate: new Date().toISOString(),
     viewMode: 'week',
     filters: {},
-    weekStartsOn: 1, // Default to Monday
+    weekStartsOn: loadWeekStartFromStorage(),
   })
 
   // initialize from TanStack DB and subscribe to live changes
@@ -74,6 +100,7 @@ export function EventsProvider(props: { children: any }) {
     },
     setWeekStartsOn(day: WeekStartDay) {
       setState('weekStartsOn', day)
+      saveWeekStartToStorage(day)
     },
   }
 
