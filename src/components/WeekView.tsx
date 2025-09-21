@@ -39,6 +39,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
 
   // Hover indicator (snapped to 15 min)
   const [hover, setHover] = createSignal<{ dayIndex: number, mins: number } | null>(null)
+  const [selectRange, setSelectRange] = createSignal<{ dayIndex: number, start: number, end: number } | null>(null)
 
   function snap(mins: number) {
     return Math.round(mins / SNAP_MIN) * SNAP_MIN
@@ -229,6 +230,31 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 </div>
               </>
             )}
+            {/* selection overlay for this day */}
+            {selectRange()?.dayIndex === i && (() => {
+              const sel = selectRange()!
+              const top = Math.min(sel.start, sel.end) * pxPerMin
+              const height = Math.max(SNAP_MIN, Math.abs(sel.end - sel.start)) * pxPerMin
+              const startD = new Date(rangeStart())
+              startD.setDate(rangeStart().getDate() + i)
+              startD.setHours(0, 0, 0, 0)
+              startD.setMinutes(Math.min(sel.start, sel.end))
+              const endD = new Date(rangeStart())
+              endD.setDate(rangeStart().getDate() + i)
+              endD.setHours(0, 0, 0, 0)
+              endD.setMinutes(Math.max(sel.start, sel.end))
+              return (
+                <div class="absolute inset-x-0 z-10 pointer-events-none">
+                  <div class="absolute left-0 right-0 bg-blue-200/30 border border-blue-300 rounded-sm" style={{ top: `${top}px`, height: `${height}px` }} />
+                  <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top}px` }}>
+                    {format(startD, 'h:mm')}
+                  </div>
+                  <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top + height}px` }}>
+                    {format(endD, 'h:mm')}
+                  </div>
+                </div>
+              )
+            })()}
             {/* current time line in today's column */}
             {todayIdx() === i && nowMins() !== null && (
               <>
@@ -311,7 +337,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 />
               )
             })}
-            {/* slot click to add/edit */}
+            {/* slot click/drag to add/edit */}
             <div
               class="absolute inset-0 z-0"
               onClick={(ev) => {
@@ -332,6 +358,44 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 const minsRaw = y / pxPerMin
                 const mins = Math.max(0, Math.min(24 * 60 - SNAP_MIN, snap(minsRaw)))
                 setHover({ dayIndex: i, mins })
+              }}
+              onPointerDown={(ev) => {
+                if (!props.onSlotClick) return
+                const rect0 = columnEls[i]?.getBoundingClientRect()
+                const startRaw = rect0 ? (((ev as any).clientY - rect0.top) / pxPerMin) : 0
+                const startMin = snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, startRaw)))
+                setSelectRange({ dayIndex: i, start: startMin, end: startMin })
+                startAuto()
+                const onMove = (e: PointerEvent) => {
+                  const r = columnEls[i]?.getBoundingClientRect()
+                  const curRaw = r ? (((e as any).clientY - r.top) / pxPerMin) : 0
+                  const curMin = snap(Math.max(0, Math.min(24 * 60, curRaw)))
+                  setSelectRange({ dayIndex: i, start: startMin, end: curMin })
+                }
+                const onUp = (e: PointerEvent) => {
+                  window.removeEventListener('pointermove', onMove)
+                  window.removeEventListener('pointerup', onUp)
+                  stopAuto()
+                  const r = columnEls[i]?.getBoundingClientRect()
+                  const endRaw = r ? (((e as any).clientY - r.top) / pxPerMin) : startMin
+                  const endMin = snap(Math.max(0, Math.min(24 * 60, endRaw)))
+                  const s = Math.min(startMin, endMin)
+                  const en = Math.max(startMin, endMin)
+                  const day = new Date(rangeStart())
+                  day.setDate(rangeStart().getDate() + i)
+                  const start = new Date(day)
+                  start.setHours(0, 0, 0, 0)
+                  start.setMinutes(s)
+                  const end = new Date(day)
+                  end.setHours(0, 0, 0, 0)
+                  if (en === s) end.setMinutes(Math.min(24 * 60, s + 60))
+                  else end.setMinutes(en)
+                  props.onSlotClick!(start.toISOString(), end.toISOString())
+                  setSelectRange(null)
+                }
+                try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch {}
+                window.addEventListener('pointermove', onMove)
+                window.addEventListener('pointerup', onUp, { once: true } as any)
               }}
               onMouseLeave={() => setHover(null)}
             />

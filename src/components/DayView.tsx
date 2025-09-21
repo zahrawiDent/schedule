@@ -4,8 +4,8 @@ import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
 import { assignLanes } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
+import { createSignal } from 'solid-js'
 import { ROW_H, pxPerMinute, snapMins, SNAP_MIN } from '../utils/timeGrid'
-import { timesFromVerticalClick } from '../utils/slots'
 import type { EventItem } from '../types'
 
 
@@ -63,6 +63,9 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
     const y = clientY - rect.top
     return y / (ROW_H / 60)
   }
+
+  // Drag-to-select range state (reactive)
+  const [selectRange, setSelectRange] = createSignal<{ start: number; end: number } | null>(null)
 
   // Auto-scroll near viewport edges while dragging/resizing
   let autoRaf = 0
@@ -185,15 +188,75 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
             )
           })
         })()}
-  {/* slot overlay for click-to-add */}
-    <div
-        class="absolute inset-0 z-0"
-          onClick={(ev) => {
+        {/* selection overlay (visual) */}
+        {(() => {
+          const sel = selectRange()
+          if (!sel) return null as any
+          const top = Math.min(sel.start, sel.end) * pxPerMin
+          const height = Math.max(SNAP_MIN, Math.abs(sel.end - sel.start)) * pxPerMin
+          const startLabel = (() => {
+            const d = new Date(anchor())
+            d.setHours(0, 0, 0, 0)
+            d.setMinutes(Math.min(sel.start, sel.end))
+            return d
+          })()
+          const endLabel = (() => {
+            const d = new Date(anchor())
+            d.setHours(0, 0, 0, 0)
+            d.setMinutes(Math.max(sel.start, sel.end))
+            return d
+          })()
+          return (
+            <div class="absolute inset-x-0 z-10 pointer-events-none">
+              <div class="absolute left-0 right-0 bg-blue-200/30 border border-blue-300 rounded-sm" style={{ top: `${top}px`, height: `${height}px` }} />
+              <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top}px` }}>
+                {new Date(startLabel).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </div>
+              <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top + height}px` }}>
+                {new Date(endLabel).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+              </div>
+            </div>
+          )
+        })()}
+        {/* slot overlay for click or drag-to-select */}
+        <div
+          class="absolute inset-0 z-0"
+          onPointerDown={(ev) => {
             if (!props.onSlotClick) return
-            const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
-            const y = (ev as any).clientY - rect.top
-            const { startISO, endISO } = timesFromVerticalClick(anchor(), y, ROW_H / 60)
-            props.onSlotClick(startISO, endISO)
+            const startRaw = minsFromClientY((ev as any).clientY)
+            const startMin = snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, startRaw)))
+            setSelectRange({ start: startMin, end: startMin })
+            startAuto()
+            const onMove = (e: PointerEvent) => {
+              const curRaw = minsFromClientY((e as any).clientY)
+              const curMin = snap(Math.max(0, Math.min(24 * 60, curRaw)))
+              setSelectRange({ start: startMin, end: curMin })
+            }
+            const onUp = (e: PointerEvent) => {
+              window.removeEventListener('pointermove', onMove)
+              window.removeEventListener('pointerup', onUp)
+              stopAuto()
+              const endRaw = minsFromClientY((e as any).clientY)
+              const endMin = snap(Math.max(0, Math.min(24 * 60, endRaw)))
+              const s = Math.min(startMin, endMin)
+              const en = Math.max(startMin, endMin)
+              const start = new Date(anchor())
+              start.setHours(0, 0, 0, 0)
+              start.setMinutes(s)
+              const end = new Date(anchor())
+              end.setHours(0, 0, 0, 0)
+              // If there was no drag, default to 60 minutes
+              if (en === s) {
+                end.setMinutes(Math.min(24 * 60, s + 60))
+              } else {
+                end.setMinutes(en)
+              }
+              props.onSlotClick!(start.toISOString(), end.toISOString())
+              setSelectRange(null)
+            }
+            try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch {}
+            window.addEventListener('pointermove', onMove)
+            window.addEventListener('pointerup', onUp, { once: true } as any)
           }}
         />
       
