@@ -23,48 +23,72 @@ export type EventBlockProps = {
 export default function EventBlock(props: EventBlockProps) {
   const s = parseISO(props.startISO)
   const e = parseISO(props.endISO)
+  const duration = e.getTime() - s.getTime()
+  const durationMinutes = duration / (1000 * 60)
+  const isShort = durationMinutes < 60 // Less than 1 hour
   return (
     <div
-      class="absolute rounded shadow text-xs text-white cursor-pointer z-10"
-      style={{ ...props.style, 'background-color': props.color ?? '#2563eb' }}
+      class="absolute rounded-lg shadow-sm border border-white/20 text-white cursor-pointer z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100"
+      style={{
+        ...props.style,
+        'background': `linear-gradient(135deg, ${props.color ?? '#2563eb'} 0%, ${adjustColorBrightness(props.color ?? '#2563eb', -20)} 100%)`,
+        'min-height': '24px'
+      }}
       onClick={(ce) => { ce.stopPropagation(); props.onClick?.(props.id) }}
-  tabindex={props.tabIndex as any}
-  onKeyDown={props.onKeyDown as any}
-  onFocus={props.onFocus as any}
-  ref={props.setRef as any}
-  data-evid={props.id}
-      title={props.title}
+      tabindex={props.tabIndex as any}
+      onKeyDown={props.onKeyDown as any}
+      onFocus={props.onFocus as any}
+      ref={props.setRef as any}
+      data-evid={props.id}
+      title={`${props.title}\n${format(s, 'p')} – ${format(e, 'p')}`}
     >
-    {props.draggable && (
+      {props.draggable && (
         <div
           class="absolute top-1 left-1 w-5 h-5 flex items-center justify-center rounded bg-black/20 text-white cursor-grab active:cursor-grabbing select-none"
           title="Drag to move"
           onPointerDown={(pe) => {
             pe.stopPropagation()
             if (props.onDragMove2D) {
-        withPointer2D((dx, dy, ev) => props.onDragMove2D!(dx, dy, ev))(pe as any)
+              withPointer2D((dx, dy, ev) => props.onDragMove2D!(dx, dy, ev))(pe as any)
             } else if (props.onDragMove) {
-        withPointer((dy, ev) => props.onDragMove!(dy, ev))(pe as any)
+              withPointer((dy, ev) => props.onDragMove!(dy, ev))(pe as any)
             }
           }}
         >
-      
+          
         </div>
       )}
       <div class="px-2 py-1 pl-8">
         <div class="font-semibold truncate">{props.title}</div>
         <div class="opacity-90 truncate">{format(s, 'p')} – {format(e, 'p')}</div>
       </div>
-  {props.resizable && (
+      {props.resizable && (
         <div
           class="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize"
           title="Drag to resize"
           onPointerDown={(pe) => {
             pe.stopPropagation()
-    withPointer((dy, ev) => props.onResize?.(dy, ev))(pe as any)
+            withPointer((dy, ev) => props.onResize?.(dy, ev))(pe as any)
           }}
         />
       )}
     </div>
   )
+}
+
+// Helper function to adjust color brightness
+function adjustColorBrightness(color: string, percent: number): string {
+  // Convert hex to RGB
+  const hex = color.replace('#', '')
+  const r = parseInt(hex.substr(0, 2), 16)
+  const g = parseInt(hex.substr(2, 2), 16)
+  const b = parseInt(hex.substr(4, 2), 16)
+
+  // Adjust brightness
+  const newR = Math.max(0, Math.min(255, r + (r * percent / 100)))
+  const newG = Math.max(0, Math.min(255, g + (g * percent / 100)))
+  const newB = Math.max(0, Math.min(255, b + (b * percent / 100)))
+
+  // Convert back to hex
+  return `#${Math.round(newR).toString(16).padStart(2, '0')}${Math.round(newG).toString(16).padStart(2, '0')}${Math.round(newB).toString(16).padStart(2, '0')}`
 }

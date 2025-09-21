@@ -94,7 +94,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
 
       {/* time labels */}
       <div class="border-r" style={{ height: `${ROW_H * 24}px` }}>
-  {HOURS.map((h) => (
+        {HOURS.map((h) => (
           <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
         ))}
       </div>
