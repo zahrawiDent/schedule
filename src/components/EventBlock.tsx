@@ -25,7 +25,7 @@ export default function EventBlock(props: EventBlockProps) {
   const e = parseISO(props.endISO)
   return (
     <div
-      class="absolute rounded-lg shadow-sm border border-white/20 text-white cursor-pointer z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100"
+      class="absolute rounded-lg shadow-sm border border-white/20 text-white cursor-pointer z-10 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none"
       style={{
         ...props.style,
         'background': `linear-gradient(135deg, ${props.color ?? '#2563eb'} 0%, ${adjustColorBrightness(props.color ?? '#2563eb', -20)} 100%)`,
