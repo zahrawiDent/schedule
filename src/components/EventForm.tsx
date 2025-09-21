@@ -118,62 +118,142 @@ export default function EventForm(props: Props) {
 
   return (
     <Show when={props.open}>
-      <div class="fixed inset-0 z-50 bg-black/30 flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={() => props.onClose()}>
-        <form ref={(el) => (dialogEl = el)} class="bg-white rounded shadow max-w-md w-full p-4 space-y-3 outline-none" onSubmit={submit} tabindex={-1} aria-label="Event form" onClick={(e) => e.stopPropagation()}>
-          <div class="text-lg font-semibold">{props.initial?.id ? 'Edit event' : 'Add event'}</div>
-          <div>
-            <label class="text-sm block">Title</label>
-            <input class="w-full border rounded px-2 py-1" value={title()} onInput={(e) => setTitle(e.currentTarget.value)} required />
+      <div class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" role="dialog" aria-modal="true" onClick={() => props.onClose()}>
+        <form
+          ref={(el) => (dialogEl = el)}
+          class="bg-white w-full max-w-lg rounded-xl shadow-xl outline-none overflow-hidden"
+          onSubmit={submit}
+          tabindex={-1}
+          aria-label="Event form"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div class="flex items-center justify-between px-5 py-3 border-b border-gray-200 bg-gray-50/60">
+            <div class="text-base sm:text-lg font-semibold text-gray-900">
+              {props.initial?.id ? 'Edit event' : 'Add event'}
+            </div>
+            <button type="button" class="p-1 rounded hover:bg-gray-200 text-gray-600" aria-label="Close" onClick={props.onClose}>
+              ×
+            </button>
           </div>
-          <div class="grid grid-cols-2 gap-2">
+
+          {/* Body */}
+          <div class="px-5 py-4 space-y-4">
             <div>
-              <label class="text-sm block">Start</label>
-              <input type="datetime-local" class="w-full border rounded px-2 py-1" value={start()} onInput={(e) => setStart(e.currentTarget.value)} />
+              <label class="text-xs font-medium text-gray-600 block mb-1">Title</label>
+              <input
+                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                value={title()}
+                onInput={(e) => setTitle(e.currentTarget.value)}
+                placeholder="Event title"
+                required
+              />
             </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">Start</label>
+                <input
+                  type="datetime-local"
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                  value={start()}
+                  onInput={(e) => setStart(e.currentTarget.value)}
+                />
+              </div>
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">End</label>
+                <input
+                  type="datetime-local"
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                  value={end()}
+                  min={start()}
+                  onInput={(e) => setEnd(e.currentTarget.value)}
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">Category</label>
+                <select
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                  value={category()}
+                  onChange={(e) => setCategory(e.currentTarget.value as any)}
+                >
+                  <option>College</option>
+                  <option>Personal</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">Color</label>
+                <div class="flex items-center gap-2">
+                  <span class="inline-block h-5 w-5 rounded border" style={{ 'background-color': color() }} />
+                  <input
+                    type="color"
+                    class="rounded-md border border-gray-300 h-9 w-12 p-1 bg-white"
+                    value={color()}
+                    onInput={(e) => setColor(e.currentTarget.value)}
+                    aria-label="Pick color"
+                  />
+                </div>
+              </div>
+            </div>
+
             <div>
-              <label class="text-sm block">End</label>
-              <input type="datetime-local" class="w-full border rounded px-2 py-1" value={end()} onInput={(e) => setEnd(e.currentTarget.value)} />
+              <label class="text-xs font-medium text-gray-600 block mb-1">Repeat rule (RRULE)</label>
+              <input
+                class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                placeholder="e.g. FREQ=WEEKLY;BYDAY=MO,WE"
+                value={rrule()}
+                onInput={(e) => setRrule(e.currentTarget.value)}
+              />
+              <p class="mt-1 text-[11px] text-gray-500">Leave blank for one-time events.</p>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">Tags</label>
+                <input
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                  placeholder="Comma-separated (e.g. work, urgent)"
+                  value={tags()}
+                  onInput={(e) => setTags(e.currentTarget.value)}
+                />
+              </div>
+              <div>
+                <label class="text-xs font-medium text-gray-600 block mb-1">Reminders (minutes)</label>
+                <input
+                  class="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/40 focus:border-blue-500"
+                  placeholder="10, 30, 60"
+                  value={reminders()}
+                  onInput={(e) => setReminders(e.currentTarget.value)}
+                />
+                <p class="mt-1 text-[11px] text-gray-500">You’ll get notifications before the event.</p>
+              </div>
             </div>
           </div>
-          <div class="grid grid-cols-2 gap-2 items-end">
-            <div>
-              <label class="text-sm block">Category</label>
-              <select class="w-full border rounded px-2 py-1" value={category()} onChange={(e) => setCategory(e.currentTarget.value as any)}>
-                <option>College</option>
-                <option>Personal</option>
-                <option>Other</option>
-              </select>
-            </div>
-            <div>
-              <label class="text-sm block">Color</label>
-              <input type="color" class="w-full border rounded px-2 py-1" value={color()} onInput={(e) => setColor(e.currentTarget.value)} />
-            </div>
-          </div>
-          <div>
-            <label class="text-sm block">Repeat rule (RRULE)</label>
-            <input class="w-full border rounded px-2 py-1" placeholder="e.g. FREQ=WEEKLY;BYDAY=MO,WE" value={rrule()} onInput={(e) => setRrule(e.currentTarget.value)} />
-          </div>
-          <div class="grid grid-cols-2 gap-2">
-            <div>
-              <label class="text-sm block">Tags (comma-separated)</label>
-              <input class="w-full border rounded px-2 py-1" value={tags()} onInput={(e) => setTags(e.currentTarget.value)} />
-            </div>
-            <div>
-              <label class="text-sm block">Reminders (minutes, comma-separated)</label>
-              <input class="w-full border rounded px-2 py-1" placeholder="10, 30, 60" value={reminders()} onInput={(e) => setReminders(e.currentTarget.value)} />
-            </div>
-          </div>
-          <div class="flex items-center justify-between gap-2 pt-2">
+
+          {/* Footer */}
+          <div class="flex items-center justify-between px-5 py-3 bg-gray-50 border-t border-gray-200">
             <div>
               {props.onDelete && (
-                <button type="button" class="px-3 py-1 rounded border text-red-600" onClick={() => props.onDelete?.()}>
+                <button
+                  type="button"
+                  class="px-3 py-2 text-sm rounded-md border border-red-200 text-red-600 hover:bg-red-50"
+                  onClick={() => props.onDelete?.()}
+                >
                   Delete
                 </button>
               )}
             </div>
             <div class="flex gap-2">
-              <button type="button" class="px-3 py-1 rounded border" onClick={props.onClose}>Cancel</button>
-              <button class="px-3 py-1 rounded bg-blue-600 text-white" type="submit">Save</button>
+              <button type="button" class="px-3 py-2 text-sm rounded-md border border-gray-300 hover:bg-gray-100" onClick={props.onClose}>
+                Cancel
+              </button>
+              <button class="px-3 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700" type="submit">
+                Save
+              </button>
             </div>
           </div>
         </form>
