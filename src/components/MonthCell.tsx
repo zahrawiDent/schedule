@@ -1,5 +1,7 @@
-import type { JSX } from 'solid-js'
+import { type JSX } from 'solid-js'
 import { format } from 'date-fns'
+
+
 /**
  * A month grid cell that renders the day number, event pills, and an optional “+N more” button.
  * It supports roving tabIndex for keyboard nav, click-to-add, and custom keydown handling.
@@ -15,18 +17,33 @@ export default function MonthCell(props: {
   moreCount?: number
   onMoreClick?: () => void
 }) {
+  // is day is today
+  const isToday = () => format(props.date, 'yyyy-MM-dd') === format(new Date(), 'yyyy-MM-dd')
   return (
     <div
       role="gridcell"
       tabindex={props.tabIndex}
       ref={props.setRef}
-  class={`min-h-28 bg-white p-1 flex flex-col relative outline-none ${props.inMonth ? '' : 'opacity-50'}`}
+      class={`
+        border-r border-b border-gray-200 last:border-r-0 
+        cursor-pointer min-h-28 bg-white p-2
+        flex flex-col relative outline-none 
+        ${props.inMonth ? '' : 'opacity-50'}`}
       onClick={props.onDayClick}
       onKeyDown={(e) => props.onKeyDown?.(e as unknown as KeyboardEvent)}
     >
-      <div class="flex items-center justify-between">
-        <span class="text-xs">{format(props.date, 'd')}</span>
+
+
+      {/* Date number */}
+      <div class="flex items-center justify-between ">
+        <span class={`text-xs font-medium
+            ${isToday() ? 'bg-blue-600 text-white rounded-full w-6 h-6 flex items-center justify-center' : ''}
+            ${!props.inMonth ? 'text-gray-400' : 'text-gray-900'}
+          `}
+        >{format(props.date, 'd')}
+        </span>
       </div>
+
       <div class="mt-1 space-y-1">
         {props.childrenEvents}
         {typeof props.moreCount === 'number' && props.moreCount > 0 && (

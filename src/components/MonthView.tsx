@@ -5,11 +5,13 @@ import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import { startOfMonth, endOfMonth } from 'date-fns'
 import { DragDropProvider, DragDropSensors, closestCenter, createDraggable, createDroppable } from '@thisbeyond/solid-dnd'
 import type { DragEvent } from '@thisbeyond/solid-dnd'
-import { createSignal, onMount, createEffect, onCleanup } from 'solid-js'
+import { createSignal, onMount, createEffect, onCleanup, For } from 'solid-js'
 import MonthCell from './MonthCell'
 import MonthPill from './MonthPill'
 import { defaultMonthClickTimes } from '../utils/slots'
 import type { EventItem } from '../types'
+
+const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function MonthView(props: { onEventClick?: (id: string, patch?: Partial<EventItem>) => void; onDayClick?: (startISO: string, endISO: string) => void }) {
   const [state, actions] = useEvents()
@@ -58,13 +60,29 @@ export default function MonthView(props: { onEventClick?: (id: string, patch?: P
   return (
     <DragDropProvider collisionDetector={closestCenter} onDragEnd={onDragEnd}>
       <DragDropSensors />
-      <div class="grid grid-cols-7 grid-rows-6 gap-px bg-gray-50 border-b border-gray-200" role="grid" aria-label="Month grid">
+
+      <div class="grid grid-cols-7  gap-px bg-gray-50 border-b border-gray-200" role="grid" aria-label="Month grid">
+        {/* grid-rows-6 */}
+
+        {/* Day labels */}
+        <For each={WEEK_DAYS}>
+          {(day) => (
+            <div class="p-3 text-center text-sm font-medium text-gray-500 border-r border-b border-gray-200 last:border-r-0">
+              {day}
+            </div>
+          )}
+        </For>
+
+        {/* Calendar days cells */}
         {days().map((d, i) => {
           const dayEvents = visible().filter((e) =>
             isWithinInterval(d, { start: startOfDay(parseISO(e.start)), end: endOfDay(parseISO(e.end)) })
           )
           return (
             <MonthDroppable id={d.toISOString()}>
+
+              {/* <div class="grid grid-cols-7 border-b border-gray-200 bg-gray-50"> */}
+              {/* </div> */}
               <MonthCell
                 date={d}
                 inMonth={inMonth(d, anchor())}
