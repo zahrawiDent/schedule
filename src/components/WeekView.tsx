@@ -49,14 +49,23 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
     if (!ev) return
     const start = parseISO(ev.start)
     const week0 = rangeStart()
-    // Only allow resizing within the same day column for simplicity
-    if (!isSameDay(start, new Date(week0.getFullYear(), week0.getMonth(), week0.getDate() + dayIndex))) return
-    const minEnd = start.getHours() * 60 + start.getMinutes() + SNAP_MIN
-    const mins = snap(Math.max(minEnd, Math.min(24 * 60, newEndMins)))
-    const newEnd = new Date(start)
-    newEnd.setHours(0, 0, 0, 0)
-    newEnd.setMinutes(mins)
-    actions.update(id, { end: newEnd.toISOString() })
+    // Determine the target end day from the hovered column
+    const endDay = new Date(week0)
+    endDay.setDate(week0.getDate() + Math.max(0, Math.min(6, dayIndex)))
+    endDay.setHours(0, 0, 0, 0)
+
+    // Clamp minutes within the day and snap
+    const minsClamped = snap(Math.max(0, Math.min(24 * 60, newEndMins)))
+    const proposedEnd = new Date(endDay)
+    proposedEnd.setMinutes(minsClamped)
+
+    // Enforce minimum duration: end must be at least SNAP_MIN after start
+    const minEndTime = start.getTime() + SNAP_MIN * 60000
+    if (proposedEnd.getTime() < minEndTime) {
+      proposedEnd.setTime(minEndTime)
+    }
+
+    actions.update(id, { end: proposedEnd.toISOString() })
   }
 
   // using shared withPointer2D
@@ -174,6 +183,11 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               const gutter = 4 // px gap between lanes
               const widthPct = 100 / laneCount
               const leftPct = widthPct * lane
+              // Determine if this segment is on the event's start day or end day
+              const sAbs = parseISO(e.start)
+              const eAbs = parseISO(e.end)
+              const isStartSegment = isSameDay(sAbs, d)
+              const isEndSegment = isSameDay(eAbs, d)
               return (
                 <EventBlock
                   id={id}
@@ -181,8 +195,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   color={e.color}
                   startISO={e.start}
                   endISO={e.end}
-                  draggable={!e.sourceId}
-                  resizable={!e.sourceId}
+                  draggable={!e.sourceId && isStartSegment}
+                  resizable={!e.sourceId && isEndSegment}
                   style={{
                     top: `${top}px`,
                     height: `${height}px`,
@@ -204,19 +218,21 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     const en = parseISO(e.end)
                     const sM = s.getHours() * 60 + s.getMinutes()
                     const enM = en.getHours() * 60 + en.getMinutes()
-                    if (ke.key === 'ArrowUp') { moveEventTo(id, i, sM - SNAP_MIN); ke.preventDefault(); }
-                    if (ke.key === 'ArrowDown') { moveEventTo(id, i, sM + SNAP_MIN); ke.preventDefault(); }
-                    if (ke.key === 'ArrowLeft') { resizeEventTo(id, i, Math.max(sM + SNAP_MIN, enM - SNAP_MIN)); ke.preventDefault(); }
-                    if (ke.key === 'ArrowRight') { resizeEventTo(id, i, enM + SNAP_MIN); ke.preventDefault(); }
+                    if (ke.key === 'ArrowUp' && isStartSegment) { moveEventTo(id, i, sM - SNAP_MIN); ke.preventDefault(); }
+                    if (ke.key === 'ArrowDown' && isStartSegment) { moveEventTo(id, i, sM + SNAP_MIN); ke.preventDefault(); }
+                    if (ke.key === 'ArrowLeft' && isEndSegment) { resizeEventTo(id, i, Math.max(sM + SNAP_MIN, enM - SNAP_MIN)); ke.preventDefault(); }
+                    if (ke.key === 'ArrowRight' && isEndSegment) { resizeEventTo(id, i, enM + SNAP_MIN); ke.preventDefault(); }
                   }}
                   setRef={(el) => blockRefs.push(el)}
                   onDragMove2D={(_dxPx, dyPx, ev) => {
+                    if (!isStartSegment) return
                     const startAt = (parseISO(e.start).getHours() * 60 + parseISO(e.start).getMinutes())
                     const dayIdx = getDayIndexFromClientX((ev as any).clientX)
                     const deltaMin = dyPx / pxPerMin
                     moveEventTo(id, dayIdx ?? i, startAt + deltaMin)
                   }}
                   onResize={(_dyPx, ev) => {
+                    if (!isEndSegment) return
                     const endAtAbs = parseISO(e.end)
                     const dayIdx = getDayIndexFromClientX((ev as any).clientX)
                     const minsInDay = snap(Math.max(0, Math.min(24 * 60, (endAtAbs.getHours() * 60 + endAtAbs.getMinutes()) + (_dyPx / pxPerMin))))

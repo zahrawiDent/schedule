@@ -91,6 +91,10 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
             const lane = laneIndexById.get(id) ?? 0
             const widthPct = 100 / laneCount
             const leftPct = widthPct * lane
+            const sAbs = parseISO(e.start)
+            const eAbs = parseISO(e.end)
+            const isStartSegment = isSameDay(sAbs, day)
+            const isEndSegment = isSameDay(eAbs, day)
             return (
               <EventBlock
                 id={id}
@@ -98,8 +102,8 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
                 color={e.color}
                 startISO={e.start}
                 endISO={e.end}
-                draggable={!e.sourceId}
-                resizable={!e.sourceId}
+                draggable={!e.sourceId && isStartSegment}
+                resizable={!e.sourceId && isEndSegment}
                 style={{
                   top: `${top}px`,
                   height: `${height}px`,
@@ -109,10 +113,12 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
                 }}
                 onClick={(id) => props.onEventClick?.(id, { start: e.start, end: e.end })}
                 onDragMove={(dyPx) => {
+                  if (!isStartSegment) return
                   const deltaMin = dyPx / pxPerMin
                   moveEvent(baseId, startMins + deltaMin)
                 }}
                 onResize={(dyPx) => {
+                  if (!isEndSegment) return
                   const deltaMin = dyPx / pxPerMin
                   resizeEvent(baseId, endMins + deltaMin)
                 }}
@@ -128,10 +134,10 @@ export default function DayView(props: { onEventClick?: (id: string, patch?: Par
                   const en = parseISO(e.end)
                   const sM = s.getHours() * 60 + s.getMinutes()
                   const enM = en.getHours() * 60 + en.getMinutes()
-                  if (ke.key === 'ArrowUp') { moveEvent(baseId, sM - SNAP_MIN); ke.preventDefault(); }
-                  if (ke.key === 'ArrowDown') { moveEvent(baseId, sM + SNAP_MIN); ke.preventDefault(); }
-                  if (ke.key === 'ArrowLeft') { resizeEvent(baseId, Math.max(sM + SNAP_MIN, enM - SNAP_MIN)); ke.preventDefault(); }
-                  if (ke.key === 'ArrowRight') { resizeEvent(baseId, enM + SNAP_MIN); ke.preventDefault(); }
+                  if (ke.key === 'ArrowUp' && isStartSegment) { moveEvent(baseId, sM - SNAP_MIN); ke.preventDefault(); }
+                  if (ke.key === 'ArrowDown' && isStartSegment) { moveEvent(baseId, sM + SNAP_MIN); ke.preventDefault(); }
+                  if (ke.key === 'ArrowLeft' && isEndSegment) { resizeEvent(baseId, Math.max(sM + SNAP_MIN, enM - SNAP_MIN)); ke.preventDefault(); }
+                  if (ke.key === 'ArrowRight' && isEndSegment) { resizeEvent(baseId, enM + SNAP_MIN); ke.preventDefault(); }
                 }}
                 tabIndex={0}
                 setRef={(el) => blockRefs.push(el)}
