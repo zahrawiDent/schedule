@@ -4,10 +4,12 @@ import { EventsProvider, useEvents } from './context/EventsContext'
 import CalendarNav from './components/CalendarNav'
 import SettingsModal from './components/SettingsModal'
 import CheatSheetModal from './components/CheatSheetModal'
+import RecurrenceChoiceModal from './components/RecurrenceChoiceModal'
 import MonthView from './components/MonthView'
 import WeekView from './components/WeekView'
 import DayView from './components/DayView'
 import EventForm from './components/EventForm'
+import { ToastContainer } from './components/ui/Toast'
 // import Sidebar from './components/Sidebar'
 import { onCleanup, onMount } from 'solid-js'
 import { scheduleReminders } from './utils/reminders'
@@ -20,6 +22,8 @@ function CalendarApp() {
   const [cheatsOpen, setCheatsOpen] = createSignal(false)
   const [state, actions] = useEvents()
   const [remindersOn] = createSignal(false)
+  const [recurrenceOpen, setRecurrenceOpen] = createSignal(false)
+  const [recCtx, setRecCtx] = createSignal<{ baseId: string; ev: any; patch?: Partial<{ start: string; end: string }>; clickedId: string } | null>(null)
 
   function submit(data: any) {
     if (data.id) actions.update(data.id, data)
@@ -33,19 +37,10 @@ function CalendarApp() {
     if (!ev) return
     const isOccurrence = id.includes('::') || !!ev.rrule
     if (isOccurrence && ev.rrule) {
-      const choice = window.confirm('Edit only this occurrence? Click OK for this occurrence, Cancel for the entire series.')
-      if (choice) {
-        // Detach this occurrence as a standalone event instance; add exdate to parent
-        const occStartISO = patch?.start ?? ev.start
-        const occEndISO = patch?.end ?? ev.end
-        const detached = { ...ev, id: `${ev.id}-${occStartISO}`, parentId: ev.id, rrule: undefined, exdates: undefined, start: occStartISO, end: occEndISO }
-        actions.update(ev.id, { exdates: [...(ev.exdates ?? []), occStartISO] })
-        actions.add(detached as any)
-        setEditing(detached)
-        setOpen(true)
-        return
-      }
-      // else fall through to edit series
+      // Open a proper modal to choose between editing the series or only this occurrence
+      setRecCtx({ baseId, ev, patch, clickedId: id })
+      setRecurrenceOpen(true)
+      return
     }
     const initial = { ...ev, ...(patch ?? {}) }
     setEditing(initial)
@@ -144,6 +139,45 @@ function CalendarApp() {
   />
   <SettingsModal open={settingsOpen()} onClose={() => setSettingsOpen(false)} />
   <CheatSheetModal open={cheatsOpen()} onClose={() => setCheatsOpen(false)} />
+  <RecurrenceChoiceModal
+    open={recurrenceOpen()}
+    onCancel={() => { setRecurrenceOpen(false); setRecCtx(null) }}
+    onEditOccurrence={() => {
+      const ctx = recCtx()
+      if (!ctx) return
+      const ev = ctx.ev
+      const occStartISO = ctx.patch?.start ?? ev.start
+      const occEndISO = ctx.patch?.end ?? ev.end
+      const detached = { ...ev, id: `${ev.id}-${occStartISO}`, parentId: ev.id, rrule: undefined, exdates: undefined, start: occStartISO, end: occEndISO }
+      actions.update(ev.id, { exdates: [...(ev.exdates ?? []), occStartISO] })
+      actions.add(detached as any)
+      setRecurrenceOpen(false)
+      setRecCtx(null)
+      setEditing(detached)
+      setOpen(true)
+    }}
+    onEditSeries={() => {
+      const ctx = recCtx()
+      if (!ctx) return
+      const initial = { ...ctx.ev, ...(ctx.patch ?? {}) }
+      setRecurrenceOpen(false)
+      setRecCtx(null)
+      setEditing(initial)
+      setOpen(true)
+    }}
+    title={(() => {
+      const ctx = recCtx()
+      return ctx?.ev?.title
+    })() as any}
+    whenLabel={(() => {
+      const ctx = recCtx()
+      if (!ctx) return undefined
+      const s = new Date(ctx.patch?.start ?? ctx.ev.start)
+      const e = new Date(ctx.patch?.end ?? ctx.ev.end)
+      return `${s.toLocaleString([], { hour: 'numeric', minute: '2-digit', weekday: 'short', month: 'short', day: 'numeric' })} – ${e.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`
+    })() as any}
+  />
+  <ToastContainer />
     </div >
   )
 }

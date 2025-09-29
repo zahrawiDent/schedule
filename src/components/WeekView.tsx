@@ -19,6 +19,7 @@ import NowIndicator from './NowIndicator'
 import { computeMoveToDay, computeResizeToDay } from '../utils/eventUpdates'
 import { createPreviewState } from '../utils/dragPreview'
 import { createAutoScroll } from '../utils/autoScroll'
+import { pushToast } from './ui/Toast'
 
 // use shared time grid constants
 
@@ -270,8 +271,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   color={e.color}
                   startISO={e.start}
                   endISO={e.end}
-                  draggable={!e.sourceId && isStartSegment}
-                  resizable={!e.sourceId && isEndSegment}
+                  draggable={isStartSegment}
+                  resizable={isEndSegment}
                   style={(() => {
                     if (isDraggingThis && targetRect) {
                       return {
@@ -325,10 +326,47 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     }
                   }}
                   onDragStart={() => { setDragging({ baseId }); startAuto() }}
-                  onDragEnd={() => {
+                  onDragEnd={async () => {
                     const p = preview()[baseId]
                     if (p?.startMins != null) {
-                      moveEventTo(baseId, p.dayIndex ?? i, p.startMins)
+                      if (e.sourceId) {
+                        // Recurring occurrence: detach and move only this instance to target day/time
+                        const parent = state.events.find((x) => x.id === baseId)
+                        if (parent && parent.rrule) {
+                          const occStart = parseISO(e.start)
+                          const occEnd = parseISO(e.end)
+                          const duration = occEnd.getTime() - occStart.getTime()
+                          const day0 = new Date(rangeStart())
+                          day0.setDate(day0.getDate() + (p.dayIndex ?? i))
+                          day0.setHours(0, 0, 0, 0)
+                          day0.setMinutes(p.startMins)
+                          const newStart = day0
+                          const newEnd = new Date(newStart.getTime() + duration)
+                          const detached = {
+                            ...parent,
+                            parentId: parent.id,
+                            rrule: undefined,
+                            exdates: undefined,
+                            start: newStart.toISOString(),
+                            end: newEnd.toISOString(),
+                          }
+                          const prevEx = [...(parent.exdates ?? [])]
+                          await actions.update(parent.id, { exdates: [...prevEx, e.start] })
+                          const { id: _ignore, ...payload } = detached as any
+                          const created = await actions.add(payload)
+                          pushToast({
+                            message: 'Edited only this occurrence',
+                            type: 'success',
+                            actionLabel: 'Undo',
+                            onAction: () => {
+                              actions.remove(created.id)
+                              actions.update(parent.id, { exdates: prevEx })
+                            }
+                          })
+                        }
+                      } else {
+                        moveEventTo(baseId, p.dayIndex ?? i, p.startMins)
+                      }
                     }
                     clearPreviewStart(baseId)
                     setDragging(null)
@@ -349,10 +387,45 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     }
                   }}
                   onResizeStart={() => startAuto()}
-                  onResizeEnd={() => {
+                  onResizeEnd={async () => {
                     const pr = preview()[baseId]
                     if (pr?.endMins != null) {
-                      resizeEventTo(baseId, pr.dayIndex ?? i, pr.endMins)
+                      if (e.sourceId) {
+                        // Recurring occurrence: detach and resize only this instance in target day
+                        const parent = state.events.find((x) => x.id === baseId)
+                        if (parent && parent.rrule) {
+                          const occStart = parseISO(e.start)
+                          const day0 = new Date(rangeStart())
+                          day0.setDate(day0.getDate() + (pr.dayIndex ?? i))
+                          day0.setHours(0, 0, 0, 0)
+                          // keep start at occurrence start (in its day), change end to new absolute
+                          const newEnd = day0
+                          newEnd.setMinutes(pr.endMins)
+                          const detached = {
+                            ...parent,
+                            parentId: parent.id,
+                            rrule: undefined,
+                            exdates: undefined,
+                            start: occStart.toISOString(),
+                            end: newEnd.toISOString(),
+                          }
+                          const prevEx = [...(parent.exdates ?? [])]
+                          await actions.update(parent.id, { exdates: [...prevEx, e.start] })
+                          const { id: _ignore, ...payload } = detached as any
+                          const created = await actions.add(payload)
+                          pushToast({
+                            message: 'Edited only this occurrence',
+                            type: 'success',
+                            actionLabel: 'Undo',
+                            onAction: () => {
+                              actions.remove(created.id)
+                              actions.update(parent.id, { exdates: prevEx })
+                            }
+                          })
+                        }
+                      } else {
+                        resizeEventTo(baseId, pr.dayIndex ?? i, pr.endMins)
+                      }
                     }
                     clearPreviewEnd(baseId)
                     stopAuto()

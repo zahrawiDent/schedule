@@ -55,6 +55,7 @@ import { createPreviewState } from '../utils/dragPreview'
 import { createAutoScroll } from '../utils/autoScroll'
 import { computeMoveWithinDay, computeResizeWithinDay } from '../utils/eventUpdates'
 import type { EventItem } from '../types'
+import { pushToast } from './ui/Toast'
 
 type DayViewProps = {
   // Fired when an EventBlock is clicked
@@ -203,8 +204,8 @@ export default function DayView(props: DayViewProps) {
               endISO={e.end}
               // Only allow editing on non-recurring base events and on the segment that
               // actually starts/ends on this day (avoids cross-day drag confusion).
-              draggable={!e.sourceId && isStartSegment}
-              resizable={!e.sourceId && isEndSegment}
+              draggable={isStartSegment}
+              resizable={isEndSegment}
               style={{
                 top: `${top}px`,
                 height: `${height}px`,
@@ -228,10 +229,47 @@ export default function DayView(props: DayViewProps) {
                 }
               }}
               onDragStart={() => { setDragging(baseId); startAuto() }}
-              onDragEnd={() => {
+              onDragEnd={async () => {
                 // Commit last position using preview and clear it
                 const p = preview()[baseId]
-                if (p?.startMins != null) moveEvent(baseId, p.startMins)
+                if (p?.startMins != null) {
+                  if (e.sourceId) {
+                    // Recurring occurrence: detach and move only this instance
+                    const parent = state.events.find((x) => x.id === baseId)
+                    if (parent && parent.rrule) {
+                      const occStart = parseISO(e.start)
+                      const occEnd = parseISO(e.end)
+                      const duration = occEnd.getTime() - occStart.getTime()
+                      const newStart = new Date(anchor())
+                      newStart.setHours(0, 0, 0, 0)
+                      newStart.setMinutes(p.startMins)
+                      const newEnd = new Date(newStart.getTime() + duration)
+                      const detached = {
+                        ...parent,
+                        parentId: parent.id,
+                        rrule: undefined,
+                        exdates: undefined,
+                        start: newStart.toISOString(),
+                        end: newEnd.toISOString(),
+                      }
+                      const prevEx = [...(parent.exdates ?? [])]
+                      await actions.update(parent.id, { exdates: [...prevEx, e.start] })
+                      const { id: _ignore, ...payload } = detached as any
+                      const created = await actions.add(payload)
+                      pushToast({
+                        message: 'Edited only this occurrence',
+                        type: 'success',
+                        actionLabel: 'Undo',
+                        onAction: () => {
+                          actions.remove(created.id)
+                          actions.update(parent.id, { exdates: prevEx })
+                        }
+                      })
+                    }
+                  } else {
+                    moveEvent(baseId, p.startMins)
+                  }
+                }
                 clearPreviewStart(baseId)
                 setDragging(null)
                 stopAuto()
@@ -244,9 +282,43 @@ export default function DayView(props: DayViewProps) {
                 setPreviewEnd(baseId, snap(abs))
               }}
               onResizeStart={() => startAuto()}
-              onResizeEnd={() => {
+              onResizeEnd={async () => {
                 const p = preview()[baseId]
-                if (p?.endMins != null) resizeEvent(baseId, p.endMins)
+                if (p?.endMins != null) {
+                  if (e.sourceId) {
+                    // Recurring occurrence: detach and resize only this instance
+                    const parent = state.events.find((x) => x.id === baseId)
+                    if (parent && parent.rrule) {
+                      const occStart = parseISO(e.start)
+                      const newEnd = new Date(anchor())
+                      newEnd.setHours(0, 0, 0, 0)
+                      newEnd.setMinutes(p.endMins)
+                      const detached = {
+                        ...parent,
+                        parentId: parent.id,
+                        rrule: undefined,
+                        exdates: undefined,
+                        start: occStart.toISOString(),
+                        end: newEnd.toISOString(),
+                      }
+                      const prevEx = [...(parent.exdates ?? [])]
+                      await actions.update(parent.id, { exdates: [...prevEx, e.start] })
+                      const { id: _ignore, ...payload } = detached as any
+                      const created = await actions.add(payload)
+                      pushToast({
+                        message: 'Edited only this occurrence',
+                        type: 'success',
+                        actionLabel: 'Undo',
+                        onAction: () => {
+                          actions.remove(created.id)
+                          actions.update(parent.id, { exdates: prevEx })
+                        }
+                      })
+                    }
+                  } else {
+                    resizeEvent(baseId, p.endMins)
+                  }
+                }
                 clearPreviewEnd(baseId)
                 stopAuto()
               }}
