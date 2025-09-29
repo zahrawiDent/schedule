@@ -58,10 +58,10 @@ import { parseISO, isSameDay, startOfDay, endOfDay } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
-import { layoutLanesWithSpan } from '../utils/lanes'
+import { assignLanes } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
 import SelectionOverlay from './SelectionOverlay'
-import { createSignal } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 import { ROW_H, pxPerMinute, snapMins, SNAP_MIN } from '../utils/timeGrid'
 import { createPreviewState } from '../utils/dragPreview'
 import { createAutoScroll } from '../utils/autoScroll'
@@ -101,6 +101,25 @@ export default function DayView(props: DayViewProps) {
   // Shared preview state (visual-only) and auto-scroll
   const { preview, setStart: setPreviewStart, setEnd: setPreviewEnd, clearStart: clearPreviewStart, clearEnd: clearPreviewEnd } = createPreviewState(snap, SNAP_MIN)
   const { start: startAuto, stop: stopAuto } = createAutoScroll()
+  // Track active drag baseId and edge navigation
+  const [dragging, setDragging] = createSignal<string | null>(null)
+  let edgeTimer: number | null = null
+  const EDGE_PX = 32
+  const startEdgeNav = (dir: -1 | 1) => {
+    if (edgeTimer != null) return
+    edgeTimer = window.setInterval(() => {
+      const cur = parseISO(state.viewDate)
+      const next = new Date(cur)
+      next.setDate(cur.getDate() + dir)
+      actions.setViewDate(next.toISOString())
+    }, 450) as any
+  }
+  const stopEdgeNav = () => {
+    if (edgeTimer != null) {
+      window.clearInterval(edgeTimer)
+      edgeTimer = null
+    }
+  }
 
   function moveEvent(id: string, newStartMins: number) {
     // Move the base event (series source) within the anchor day.
@@ -165,8 +184,8 @@ export default function DayView(props: DayViewProps) {
           .filter((seg) => seg.endMins > seg.startMins)
           .sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins)
 
-  const { sorted, byId } = layoutLanesWithSpan(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
-  const gutter = 4
+        const { sorted, laneIndexById, laneCount } = assignLanes(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
+        const gutter = 4
 
         return sorted.map(({ data }) => {
           const { e, id, startMins, endMins } = data
@@ -177,11 +196,8 @@ export default function DayView(props: DayViewProps) {
           const dispEndMins = p?.endMins != null ? p.endMins : endMins
           const top = dispStartMins * pxPerMin
           const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
-          const meta = byId.get(id) || { lane: 0, span: 1, totalLanes: 1 }
-          const lane = meta.lane
-          const span = meta.span
-          const total = meta.totalLanes
-          const widthPct = 100 / total
+          const lane = laneIndexById.get(id) ?? 0
+          const widthPct = 100 / laneCount
           const leftPct = widthPct * lane
           const sAbs = parseISO(e.start)
           const eAbs = parseISO(e.end)
@@ -202,23 +218,33 @@ export default function DayView(props: DayViewProps) {
                 top: `${top}px`,
                 height: `${height}px`,
                 left: `calc(${leftPct}% + ${gutter}px)`,
-                width: `calc(${widthPct * span}% - ${gutter * 2}px)`,
+                width: `calc(${widthPct}% - ${gutter * 2}px)`,
                 transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
+                ...({ opacity: dragging() === baseId ? 0 : 1 } as any),
               }}
               onClick={(id) => props.onEventClick?.(id, { start: e.start, end: e.end })}
-              onDragMove={(_dyPx, ev: any) => {
-                // Convert pointer Y to minutes and move the base event.
+              onDragMove2D={(_dxPx, _dyPx, ev: any) => {
+                // Convert pointer Y to minutes; navigate days when hitting horizontal edges.
                 if (!isStartSegment) return
                 const mins = minsFromClientY(ev.clientY)
                 setPreviewStart(baseId, mins)
+                const pane = rightPaneRef
+                if (pane) {
+                  const rect = pane.getBoundingClientRect()
+                  if (ev.clientX > rect.right - EDGE_PX) startEdgeNav(1)
+                  else if (ev.clientX < rect.left + EDGE_PX) startEdgeNav(-1)
+                  else stopEdgeNav()
+                }
               }}
-              onDragStart={() => startAuto()}
+              onDragStart={() => { setDragging(baseId); startAuto() }}
               onDragEnd={() => {
                 // Commit last position using preview and clear it
                 const p = preview()[baseId]
                 if (p?.startMins != null) moveEvent(baseId, p.startMins)
                 clearPreviewStart(baseId)
+                setDragging(null)
                 stopAuto()
+                stopEdgeNav()
               }}
               onResize={(_dyPx, ev: any) => {
                 // Convert pointer Y to minutes and resize the base event's end.
@@ -316,6 +342,48 @@ export default function DayView(props: DayViewProps) {
           window.addEventListener('pointerup', onUp, { once: true } as any)
         }}
       />
+
+      {/* Drag overlay to persist the moving block across day changes while dragging */}
+      <Show when={(() => !!(dragging && dragging()))() as any}>
+        {(() => {
+          const baseId = dragging() as string | null
+          const pane = rightPaneRef as HTMLDivElement | null
+          if (!baseId || !pane) return null as any
+          const ev = state.events.find((e) => e.id === baseId)
+          if (!ev) return null as any
+          const p = preview()[baseId]
+          const sAbs = parseISO(ev.start)
+          const eAbs = parseISO(ev.end)
+          const startMins = sAbs.getHours() * 60 + sAbs.getMinutes()
+          const endMins = eAbs.getHours() * 60 + eAbs.getMinutes()
+          const dispStartMins = p?.startMins != null ? p.startMins : startMins
+          const dispEndMins = p?.endMins != null ? p.endMins : endMins
+          const top = dispStartMins * pxPerMin
+          const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
+          const rect = (pane as HTMLDivElement).getBoundingClientRect()
+          const gutter = 4
+          return (
+            <EventBlock
+              id={`${baseId}::overlay`}
+              title={ev.title}
+              color={ev.color}
+              startISO={ev.start}
+              endISO={ev.end}
+              draggable={false}
+              resizable={false}
+              style={{
+                top: `${rect.top + top}px`,
+                height: `${height}px`,
+                left: `${rect.left + gutter}px`,
+                width: `${rect.width - gutter * 2}px`,
+                transition: 'none',
+                ...({ position: 'fixed' } as any),
+              } as any}
+              onClick={() => {}}
+            />
+          )
+        })()}
+      </Show>
 
     </TimeGrid>
   )
