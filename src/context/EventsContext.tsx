@@ -2,7 +2,14 @@ import { createContext, useContext, onCleanup } from 'solid-js'
 import { createStore } from 'solid-js/store'
 import { v4 as uuidv4 } from 'uuid'
 import type { EventItem, EventId, ViewMode, Filters, WeekStartDay } from '../types'
-import { eventsCollection, migrateFromLegacyIfNeeded } from '../data/db'
+import {
+  initializeStore,
+  getEvents,
+  addEvent,
+  updateEvent,
+  removeEvent,
+  subscribeToEvents
+} from '../data/db'
 
 type State = {
   events: EventItem[]
@@ -62,32 +69,30 @@ export function EventsProvider(props: { children: any }) {
     weekStartsOn: loadWeekStartFromStorage(),
   })
 
-  // initialize from TanStack DB and subscribe to live changes
-  ;(async () => {
-    await migrateFromLegacyIfNeeded()
-    const initial = (await eventsCollection.toArrayWhenReady()) as EventItem[]
-    setState('events', initial)
-  })()
+    // initialize from TinyBase and subscribe to live changes
+    ; (async () => {
+      await initializeStore()
+      const initial = getEvents()
+      setState('events', initial)
+    })()
 
-  const unsubscribe = eventsCollection.subscribeChanges(() => {
-    setState('events', eventsCollection.toArray as unknown as EventItem[])
-  }, { includeInitialState: false })
+  const unsubscribe = subscribeToEvents((events) => {
+    setState('events', events)
+  })
   onCleanup(() => unsubscribe())
 
+  // actions is the CRUD operations
   const actions = {
     async add(ev: Omit<EventItem, 'id'>) {
-  const newEv: EventItem = { ...ev, id: crypto.randomUUID?.() ?? uuidv4() }
-  const tx = eventsCollection.insert(newEv)
-  await tx.isPersisted.promise
-  return newEv
+      const newEv: EventItem = { ...ev, id: crypto.randomUUID?.() ?? uuidv4() }
+      addEvent(newEv)
+      return newEv
     },
     async update(id: EventId, patch: Partial<EventItem>) {
-  const tx = eventsCollection.update(id, (draft: any) => Object.assign(draft, patch))
-  await tx.isPersisted.promise
+      updateEvent(id, patch)
     },
     async remove(id: EventId) {
-  const tx = eventsCollection.delete(id)
-  await tx.isPersisted.promise
+      removeEvent(id)
     },
     setViewDate(dateISO: string) {
       setState('viewDate', dateISO)

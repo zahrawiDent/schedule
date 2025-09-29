@@ -1,3 +1,4 @@
+
 import { createSignal, Show, createEffect } from 'solid-js'
 import { EventsProvider, useEvents } from './context/EventsContext'
 import CalendarNav from './components/CalendarNav'
@@ -8,6 +9,7 @@ import EventForm from './components/EventForm'
 // import Sidebar from './components/Sidebar'
 import { onCleanup, onMount } from 'solid-js'
 import { scheduleReminders } from './utils/reminders'
+
 
 function CalendarApp() {
   const [open, setOpen] = createSignal(false)
@@ -81,27 +83,9 @@ function CalendarApp() {
 
   return (
     <div class="min-h-screen flex flex-col">
-      {/* CalendarNav */}
       <CalendarNav />
 
-      {/* Event controls (add, reminders) */}
-
-      {/* <div class="p-2 flex gap-2 items-center border-b"> */}
-      {/*   <button class="px-3 py-1 rounded bg-blue-600 text-white" onClick={() => setOpen(true)} aria-keyshortcuts="N">Add event</button> */}
-      {/*   <button class="px-3 py-1 rounded border" onClick={async () => { */}
-      {/*     if (!('Notification' in window)) return */}
-      {/*     if (Notification.permission !== 'granted') await Notification.requestPermission() */}
-      {/*     setRemindersOn((v) => !v) */}
-      {/*   }}> */}
-      {/*     {remindersOn() ? 'Reminders: On' : 'Reminders: Off'} */}
-      {/*   </button> */}
-      {/* </div> */}
-
       <div class="flex-1 overflow-hidden flex">
-        {/* Sidebar */}
-        {/* <div class="hidden sm:block shrink-0"> */}
-        {/*   <Sidebar /> */}
-        {/* </div> */}
 
         <div class="flex-1 overflow-auto">
           <Show when={state.viewMode === 'month'}>
@@ -151,7 +135,7 @@ function CalendarApp() {
         onSubmit={submit}
         onDelete={editing()?.id ? () => (actions.remove(editing()!.id), setOpen(false), setEditing(null)) : undefined}
       />
-    </div>
+    </div >
   )
 }
 

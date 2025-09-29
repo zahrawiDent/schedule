@@ -1,11 +1,13 @@
 import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod, isToday } from 'date-fns'
-import { createSignal, onCleanup } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 import { weekRange } from '../utils/dateUtils'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
 import { assignLanes } from '../utils/lanes'
 import { HOURS, ROW_H, pxPerMinute, SNAP_MIN } from '../utils/timeGrid'
+import HoverIndicator from './HoverIndicator'
+import NowIndicator from './NowIndicator'
 import { timesFromVerticalClick } from '../utils/slots'
 
 // use shared time grid constants
@@ -20,22 +22,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
   const pxPerMin = pxPerMinute()
-  const [nowMins, setNowMins] = createSignal<number | null>(null)
-  const [todayIdx, setTodayIdx] = createSignal<number | null>(null)
-  const updateNow = () => {
-    const now = new Date()
-    if (now >= rangeStart() && now <= rangeEnd()) {
-      setNowMins(now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60)
-      const idx = days().findIndex((d) => isToday(d))
-      setTodayIdx(idx >= 0 ? idx : null)
-    } else {
-      setNowMins(null)
-      setTodayIdx(null)
-    }
-  }
-  updateNow()
-  const timer = window.setInterval(updateNow, 30_000)
-  onCleanup(() => window.clearInterval(timer))
+  // WeekView no longer owns the "now" interval; NowIndicator handles it per day
 
   // Hover indicator (snapped to 15 min)
   const [hover, setHover] = createSignal<{ dayIndex: number, mins: number } | null>(null)
@@ -150,26 +137,26 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   }
 
   return (
-  <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
+    <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
       {/* header */}
       <div class="bg-white border-b border-gray-200"></div>
-    {days().map((d, i) => (
+      {days().map((d, i) => (
         <div
-      class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''} ${isToday(d) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+          class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''} ${isToday(d) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
         >
           {format(d, 'EEE dd')}
         </div>
       ))}
 
       {/* time labels */}
-    <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
+      <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
         {HOURS.map((h) => (
-      <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
+          <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
         ))}
       </div>
 
       {/* 7 day columns */}
-  {days().map((d, i) => {
+      {days().map((d, i) => {
         // Include events that overlap this day, not just those starting today
         const dayStart = sod(d)
         const dayEnd = eod(d)
@@ -209,27 +196,22 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
             {isToday(d) && (
               <div class="absolute inset-0 bg-blue-50/40 pointer-events-none" />
             )}
-            {/* hover indicator */}
-            {hover()?.dayIndex === i && (
-              <>
-                <div
-                  class="absolute left-0 right-0 h-px bg-blue-500/30 z-20 pointer-events-none"
-                  style={{ top: `${(hover()!.mins) * pxPerMin}px` }}
-                />
-                <div
-                  class="absolute left-1 -translate-y-1/2 z-20 pointer-events-none text-[10px] px-1.5 py-0.5 rounded border bg-white/80 backdrop-blur-sm text-gray-700 border-gray-200 shadow-sm"
-                  style={{ top: `${(hover()!.mins) * pxPerMin}px` }}
-                >
-                  {(() => {
-                    const day = new Date(rangeStart())
-                    day.setDate(rangeStart().getDate() + i)
-                    day.setHours(0, 0, 0, 0)
-                    day.setMinutes(hover()!.mins)
-                    return format(day, 'h:mm')
-                  })()}
-                </div>
-              </>
-            )}
+            {/* hover indicator (shared) */}
+
+            <Show when={hover()?.dayIndex === i}>
+              <HoverIndicator
+                mins={hover()!.mins}
+                pxPerMin={pxPerMin}
+                label={(() => {
+                  const day = new Date(rangeStart())
+                  day.setDate(rangeStart().getDate() + i)
+                  day.setHours(0, 0, 0, 0)
+                  day.setMinutes(hover()!.mins)
+                  return format(day, 'h:mm')
+                })()}
+              />
+            </Show>
+
             {/* selection overlay for this day */}
             {selectRange()?.dayIndex === i && (() => {
               const sel = selectRange()!
@@ -255,19 +237,10 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 </div>
               )
             })()}
-            {/* current time line in today's column */}
-            {todayIdx() === i && nowMins() !== null && (
-              <>
-                <div
-                  class="absolute left-0 right-0 h-px bg-red-500 z-30 pointer-events-none"
-                  style={{ top: `${(nowMins()! * pxPerMin)}px` }}
-                />
-                <div
-                  class="absolute w-2 h-2 bg-red-500 rounded-full -translate-y-1/2 z-30 pointer-events-none"
-                  style={{ top: `${(nowMins()! * pxPerMin)}px`, left: '0.25rem' }}
-                />
-              </>
-            )}
+            {/* current time line in today's column (shared) */}
+            <Show when={isToday(d)}>
+              <NowIndicator date={d} pxPerMin={pxPerMin} />
+            </Show>
             {/* events */}
             {sorted.map(({ data }) => {
               const { e, id, startMins, endMins } = data
@@ -393,7 +366,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   props.onSlotClick!(start.toISOString(), end.toISOString())
                   setSelectRange(null)
                 }
-                try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch {}
+                try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch { }
                 window.addEventListener('pointermove', onMove)
                 window.addEventListener('pointerup', onUp, { once: true } as any)
               }}

@@ -1,0 +1,1 @@
+add ghost preview when dragging

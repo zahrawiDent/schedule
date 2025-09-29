@@ -10,7 +10,7 @@ export function pxPerMinute(rowHeight = ROW_H) {
   return rowHeight / 60
 }
 
-/** Snap minutes to nearest multiple of snap (default SNAP_MIN). */
+/** Snap minutes to nearest multiple of snap (default SNAP_MIN). e.g, 40 -> 45, 25 -> 30 */
 export function snapMins(mins: number, snap = SNAP_MIN) {
   return Math.round(mins / snap) * snap
 }

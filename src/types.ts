@@ -6,7 +6,7 @@ export type EventId = string
 
 export type WeekStartDay = 0 | 1 | 2 | 3 | 4 | 5 | 6 // 0=Sunday, 1=Monday, etc.
 
-export interface EventBase {
+export interface EventItem {
   id: EventId
   title: string
   start: string // ISO string
@@ -23,9 +23,7 @@ export interface EventBase {
   parentId?: EventId // if this is a single modified occurrence detached from a series
 }
 
-export type EventItem = EventBase
-
-export interface EventOccurrence extends EventBase {
+export interface EventOccurrence extends EventItem {
   sourceId?: EventId
 }
 

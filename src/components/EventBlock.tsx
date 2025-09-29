@@ -1,3 +1,36 @@
+/**
+ * EventBlock
+ * ----------
+ *
+ * A purely presentational, interactive block positioned absolutely inside the TimeGrid right pane.
+ * It supports vertical drag (and optional 2D drag), resize from the bottom edge, click, keyboard,
+ * and focus. It does not perform any time calculations itself; callers convert between pixels and
+ * minutes and pass computed styles.
+ *
+ * Visuals
+ * - Styled card with gradient background derived from `color`
+ * - Minimum height to remain tappable
+ * - Optional bottom handle area for resizing (ns-resize cursor)
+ *
+ * Interactions
+ * - Drag: starts when movement exceeds a 2px threshold to avoid accidental drags
+ * - Resize: dedicated pointer area at the bottom triggers resize callbacks
+ * - Click: suppressed when a drag just occurred (didDrag flag)
+ * - Keyboard/focus: forwarded to parent via props
+ *
+ * Accessibility
+ * - `tabindex` is applied when provided, enabling roving focus patterns in parent components
+ * - `title` attribute shows times on hover
+ *
+ * Layout within the lane
+ * ----------------------
+ *  left/width are determined by the parent (lane system). This component only consumes them.
+ *
+ * Pointer helpers
+ * ---------------
+ * Uses withPointer/withPointer2D util wrappers to manage pointer capture and lifecycle, calling
+ * the supplied callbacks (onDragMove/onResize) with delta pixels.
+ */
 import { format, parseISO } from 'date-fns'
 import { withPointer, withPointer2D } from '../utils/pointer'
 
@@ -51,6 +84,7 @@ export default function EventBlock(props: EventBlockProps) {
         // Start drag from anywhere in the block
         pe.stopPropagation()
         let started = false
+    // When consumers provide 2D drag, use that; otherwise fallback to vertical-only
     if (props.onDragMove2D) {
           withPointer2D((dx, dy, ev) => {
             if (!started) {

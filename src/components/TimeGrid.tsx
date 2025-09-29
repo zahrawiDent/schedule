@@ -1,34 +1,118 @@
+/**
+ * TimeGrid
+ * --------
+ *
+ * A presentational component that renders a single-day, 24-hour vertical grid with:
+ * - A left column of hour labels
+ * - A right column where children are absolutely positioned relative to time
+ * - A live "now" indicator (only when the anchor is today)
+ * - A hover indicator snapped to the configured grid
+ *
+ * This component does not manage or mutate events. It only provides the visual grid and
+ * interaction affordances; consumers position their own children using absolute CSS top/height
+ * based on minutes from midnight and the shared ROW_H constant.
+ *
+ * Coordinate system
+ * -----------------
+ * The right pane is exactly 24 * ROW_H pixels tall. Minutes are converted to pixels via:
+ *  minutesToPixels = minutes * (ROW_H / 60)
+ * Children should set style.top (and height) using this scale. The grid does not scroll itself;
+ * it simply fills its container.
+ *
+ * Layout diagram
+ * --------------
+ *
+ *  +---------------------+-------------------------------------------+
+ *  |                     |                   Header                  |
+ *  |      (empty)        |           format(anchor, 'PPPP')          |
+ *  +---------------------+-------------------------------------------+
+ *  |  Labels column      |            Right content pane             |
+ *  |  width = left (px)  |  height = 24 * ROW_H (px), position: rel  |
+ *  |                     |  - absolutely positioned children         |
+ *  |  12am               |  - hour grid lines at y = h * ROW_H       |
+ *  |  1am                |  - now line (today only)                  |
+ *  |  2am                |  - hover line + timestamp                 |
+ *  |  ...                |                                           |
+ *  |  11pm               |                                           |
+ *  +---------------------+-------------------------------------------+
+ *
+ * Right pane coordinate system (minutes -> pixels)
+ * ------------------------------------------------
+ *  top of pane = 0 minutes = y = 0 px
+ *  1 hour      = 60 minutes = y = ROW_H px
+ *  m minutes   => y = m * (ROW_H / 60) px
+ *
+ *  Example (if ROW_H = 64):
+ *   - 1 minute   = 64/60 ≈ 1.067 px
+ *   - 30 minutes = 32 px
+ *   - 9:15 AM    = (9*60 + 15) * (64/60) = 555 * 1.066.. ≈ 592 px
+ *
+ *  Annotated right pane (not to scale):
+ *
+ *    y(px)
+ *    0 ─────────────────────────────────────────── 00:00 (midnight)
+ *      │
+ *     64 ───────────────────────────────────────── 01:00 (hour line)
+ *      │
+ *    128 ───────────────────────────────────────── 02:00
+ *      │    • (hover) 09:15  ── blue line + small label
+ *      │
+ *    576 ───────────────────────────────────────── 09:00
+ *      │
+ *    592 ── red now line + dot (if today)
+ *      │
+ *    ...
+ *  1536 ───────────────────────────────────────── 24:00 (bottom)
+ *
+ * Positioning children (events, selections)
+ * -----------------------------------------
+ *  const topPx = startMins * (ROW_H / 60)
+ *  const heightPx = (endMins - startMins) * (ROW_H / 60)
+ *
+ *  <div style={{ position: 'absolute', top: `${topPx}px`, height: `${heightPx}px` }} />
+ *
+ * Interaction affordances
+ * -----------------------
+ * - setRightPaneRef: parent components can capture the DOM node to convert pointer Y to minutes
+ *   by inverting the scale (minutes = y / (ROW_H / 60)).
+ * - Hover line snaps to SNAP_MIN increments to mirror creation/editing behavior.
+ * - The grid purposefully ignores hover when the pointer is over an element with [data-evid]
+ *   to reduce visual noise on top of event blocks.
+ *
+ * Live "now" indicator
+ The "now" line is updated every 30s with a window.setInterval; the timer is cleared on unmount.
+ */
 import type { JSX } from 'solid-js';
-import { createSignal, onCleanup } from 'solid-js'
+import { createSignal, Show } from 'solid-js'
 import { HOURS, ROW_H, SNAP_MIN } from '../utils/timeGrid'
-import { addHours, format, startOfDay, isSameDay } from 'date-fns'
+import { addHours, format, isToday, startOfDay } from 'date-fns'
+import HoverIndicator from './HoverIndicator'
+import NowIndicator from './NowIndicator'
 
 /**
- * Generic single-day time grid with a left labels column and a right absolute grid for events.
- * Provide children positioned absolutely inside the right panel (24h tall).
+ * Props for TimeGrid
+ * - anchor: Required Date representing the day shown. Used for labels and for computing today.
+ * - children: Absolutely positioned content rendered in the right pane.
+ * - setRightPaneRef: Optional ref to retrieve the right pane element for parent calculations
+ *   like pointer-to-minutes conversions or measuring.
  */
-export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; children: JSX.Element; setRightPaneRef?: (el: HTMLDivElement | null) => void }) {
-  const left = props.leftColWidth ?? 60
+type TimeGridProps = {
+  anchor: Date
+  children: JSX.Element
+  setRightPaneRef?: (el: HTMLDivElement | null) => void
+}
+export default function TimeGrid(props: TimeGridProps) {
+  // Width in pixels for the labels column
+  // Minutes from midnight under the cursor in the right pane (snapped); null when not hovering
   const [hoverMins, setHoverMins] = createSignal<number | null>(null)
-  const [nowMins, setNowMins] = createSignal<number | null>(null)
-
-  // Live "now" line for today
-  const updateNow = () => {
-    const now = new Date()
-    if (isSameDay(now, props.anchor)) {
-      const mins = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
-      setNowMins(mins)
-    } else {
-      setNowMins(null)
-    }
-  }
-  updateNow()
-  const timer = window.setInterval(updateNow, 30_000)
-  onCleanup(() => window.clearInterval(timer))
+  // TimeGrid no longer owns the "now" interval; NowIndicator handles it per provided date
   return (
-    <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': `${left}px 1fr` }}>
+    // Two-column grid: [labels | content]
+    <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': "60px 1fr" }}>
+      {/* Header row: empty cell left, formatted date on the right */}
       <div class="bg-white border-b border-gray-200"></div>
       <div class="bg-white p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200">{format(props.anchor, 'PPPP')}</div>
+      {/* Left labels column: 24 rows, one per hour */}
       <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
         {HOURS.map((h) => (
           <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(props.anchor), h), 'ha')}</div>
@@ -44,47 +128,37 @@ export default function TimeGrid(props: { anchor: Date; leftColWidth?: number; c
           const tgt = ev.target as HTMLElement
           if (tgt && tgt.closest('[data-evid]')) { setHoverMins(null); return }
           const y = (ev as any).clientY - rect.top
+          // Convert Y in pixels to minutes from midnight using the shared scale (ROW_H per hour)
           const minsRaw = y / (ROW_H / 60)
+          // Snap to the configured minute grid to mirror interactions (e.g., 15-min slots)
           const snapped = Math.round(minsRaw / SNAP_MIN) * SNAP_MIN
           const mins = Math.max(0, Math.min(24 * 60 - SNAP_MIN, snapped))
           setHoverMins(mins)
         }}
         onMouseLeave={() => setHoverMins(null)}
       >
+        {/* Hour dividers (skip the very first line at 0:00) */}
         {HOURS.map((h) => (
           h > 0 ? (
             <div class="absolute left-0 right-0 border-b border-gray-200" style={{ top: `${h * ROW_H}px`, 'pointer-events': 'none' }} />
           ) : null
         ))}
-        {/* now indicator (today only) */}
-        {nowMins() !== null && (
-          <>
-            <div
-              class="absolute left-0 right-0 h-px bg-red-500 z-30 pointer-events-none"
-              style={{ top: `${(nowMins()! * (ROW_H / 60))}px` }}
-            />
-            <div
-              class="absolute w-2 h-2 bg-red-500 rounded-full -translate-y-1/2 z-30 pointer-events-none"
-              style={{ top: `${(nowMins()! * (ROW_H / 60))}px`, left: '0.25rem' }}
-            />
-          </>
-        )}
-        {/* hover indicator */}
-        {hoverMins() !== null && (
-          <>
-            <div
-              class="absolute left-0 right-0 h-px bg-blue-500/30 z-20 pointer-events-none"
-              style={{ top: `${hoverMins()! * (ROW_H / 60)}px` }}
-            />
-            <div
-              class="absolute left-1 -translate-y-1/2 z-20 pointer-events-none text-[10px] px-1.5 py-0.5 rounded border bg-white/80 backdrop-blur-sm text-gray-700 border-gray-200 shadow-sm"
-              style={{ top: `${hoverMins()! * (ROW_H / 60)}px` }}
-            >
-              {format(new Date(props.anchor.getFullYear(), props.anchor.getMonth(), props.anchor.getDate(), 0, hoverMins() || 0), 'h:mm')}
-            </div>
-          </>
-        )}
-  {props.children}
+        {/* "Now" indicator (today only) using shared component */}
+        <Show when={isToday(props.anchor)}>
+          <NowIndicator date={props.anchor} pxPerMin={ROW_H / 60} />
+        </Show>
+
+        {/* Hover indicator: a faint blue line and a tiny timestamp label at the left. */}
+
+        <Show when={hoverMins()}>
+          <HoverIndicator
+            mins={hoverMins()!}
+            pxPerMin={ROW_H / 60}
+            label={format(new Date(props.anchor.getFullYear(), props.anchor.getMonth(), props.anchor.getDate(), 0, hoverMins() || 0), 'h:mm')}
+          />
+        </Show>
+        {/* Consumer-provided absolutely positioned content (events, selections, etc.) */}
+        {props.children}
       </div>
     </div>
   )
