@@ -62,6 +62,9 @@ import { assignLanes } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
 import { createSignal } from 'solid-js'
 import { ROW_H, pxPerMinute, snapMins, SNAP_MIN } from '../utils/timeGrid'
+import { createPreviewState } from '../utils/dragPreview'
+import { createAutoScroll } from '../utils/autoScroll'
+import { computeMoveWithinDay, computeResizeWithinDay } from '../utils/eventUpdates'
 import type { EventItem } from '../types'
 
 type DayViewProps = {
@@ -94,92 +97,28 @@ export default function DayView(props: DayViewProps) {
 
   const snap = (mins: number) => snapMins(mins)
 
-
-  // Debounce utility to limit expensive state updates during drag/resize
-  type DebouncedFn<T extends any[]> = ((...args: T) => void) & { flush: () => void; cancel: () => void }
-  function makeDebounced<T extends any[]>(fn: (...args: T) => void, wait = 80): DebouncedFn<T> {
-    let timer: number | null = null
-    let lastArgs: T | null = null
-    const fire = () => {
-      timer = null
-      if (lastArgs) fn(...lastArgs)
-      lastArgs = null
-    }
-    const d = ((...args: T) => {
-      lastArgs = args
-      if (timer) window.clearTimeout(timer)
-      timer = window.setTimeout(fire, wait)
-    }) as DebouncedFn<T>
-    d.flush = () => {
-      if (timer) {
-        window.clearTimeout(timer)
-        fire()
-      } else if (lastArgs) {
-        fn(...lastArgs)
-        lastArgs = null
-      }
-    }
-    d.cancel = () => {
-      if (timer) window.clearTimeout(timer)
-      timer = null
-      lastArgs = null
-    }
-    return d
-  }
-
-  // Instant visual preview for the block being interacted with (no state writes)
-  // Keyed by baseId (series source); store either a startMins override (drag) or endMins override (resize)
-  const [preview, setPreview] = createSignal<Record<string, { startMins?: number; endMins?: number }>>({})
-  const setPreviewStart = (baseId: string, mins: number) => setPreview((p) => ({ ...p, [baseId]: { ...(p[baseId] ?? {}), startMins: snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, mins))) } }))
-  const setPreviewEnd = (baseId: string, mins: number) => setPreview((p) => ({ ...p, [baseId]: { ...(p[baseId] ?? {}), endMins: snap(Math.max(SNAP_MIN, Math.min(24 * 60, mins))) } }))
-  const clearPreviewStart = (baseId: string) => setPreview((p) => { const n = { ...p }; if (n[baseId]) { const { endMins } = n[baseId]; if (endMins != null) n[baseId] = { endMins }; else delete n[baseId] } return n })
-  const clearPreviewEnd = (baseId: string) => setPreview((p) => { const n = { ...p }; if (n[baseId]) { const { startMins } = n[baseId]; if (startMins != null) n[baseId] = { startMins }; else delete n[baseId] } return n })
-
-  // Keep per-event debouncers so we don't recreate on every render
-  const debouncers = new Map<string, { move: DebouncedFn<[number]>; resize: DebouncedFn<[number]> }>()
-  const getDebouncers = (baseId: string) => {
-    let d = debouncers.get(baseId)
-    if (!d) {
-      d = { move: makeDebounced((mins: number) => moveEvent(baseId, mins)), resize: makeDebounced((mins: number) => resizeEvent(baseId, mins)) }
-      debouncers.set(baseId, d)
-    }
-    return d
-  }
+  // Shared preview state (visual-only) and auto-scroll
+  const { preview, setStart: setPreviewStart, setEnd: setPreviewEnd, clearStart: clearPreviewStart, clearEnd: clearPreviewEnd } = createPreviewState(snap, SNAP_MIN)
+  const { start: startAuto, stop: stopAuto } = createAutoScroll()
 
   function moveEvent(id: string, newStartMins: number) {
-    // Move the base event (series source for instances) by setting new start within the day.
-    // Keeps original duration, snaps to grid, and clamps within [0, 24h - SNAP_MIN].
+    // Move the base event (series source) within the anchor day.
     const ev = state.events.find((e) => e.id === id)
     if (!ev) return
-    const start = parseISO(ev.start)
-    const end = parseISO(ev.end)
-    const MS_IN_MIN = 60000
-    const dur = (end.getTime() - start.getTime()) / MS_IN_MIN
-    const day = anchor()
-    const newStart = new Date(day)
-    newStart.setHours(0, 0, 0, 0)
-    newStart.setMinutes(snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, newStartMins))))
-    const newEnd = new Date(newStart.getTime() + dur * 60000)
-    actions.update(id, { start: newStart.toISOString(), end: newEnd.toISOString() })
+    const patch = computeMoveWithinDay(ev, anchor(), newStartMins, snap, SNAP_MIN)
+    actions.update(id, patch)
     console.log('##############################')
-    console.log('newStart', newStart, 'newEnd', newEnd)
+    console.log('move patch', patch)
   }
 
   function resizeEvent(id: string, newEndMins: number) {
-    // Resize the base event's end within the day with snapping and a minimum length of SNAP_MIN.
+    // Resize the base event's end within the day with snapping and minimum length.
     const ev = state.events.find((e) => e.id === id)
     if (!ev) return
-    const start = parseISO(ev.start)
-    const day = anchor()
-    const minEnd = start.getHours() * 60 + start.getMinutes() + SNAP_MIN
-    const mins = snap(Math.max(minEnd, Math.min(24 * 60, newEndMins)))
-    const newEnd = new Date(day)
-    newEnd.setHours(0, 0, 0, 0)
-    newEnd.setMinutes(mins)
-    actions.update(id, { end: newEnd.toISOString() })
-
+    const patch = computeResizeWithinDay(ev, anchor(), newEndMins, snap, SNAP_MIN)
+    actions.update(id, patch)
     console.log('##############################')
-    console.log('newEnd', newEnd)
+    console.log('resize patch', patch)
   }
 
   // using shared withPointer from utils/pointer
@@ -197,33 +136,7 @@ export default function DayView(props: DayViewProps) {
   // Drag-to-select range state (reactive)
   const [selectRange, setSelectRange] = createSignal<{ start: number; end: number } | null>(null)
 
-  // Auto-scroll near viewport edges while dragging/resizing
-  let autoRaf = 0
-  const EDGE = 28
-  const WIN_SPEED = 20
-  const ptr = { x: 0, y: 0 }
-  const onPtrMove = (e: PointerEvent) => { ptr.x = (e as any).clientX; ptr.y = (e as any).clientY }
-  const tick = () => {
-    // If the pointer nears the viewport top/bottom, auto-scroll the page to aid long drags.
-    const yTop = ptr.y
-    const yBottom = window.innerHeight - ptr.y
-    let delta = 0
-    if (yTop < EDGE) delta = -Math.ceil(((EDGE - yTop) / EDGE) * WIN_SPEED)
-    else if (yBottom < EDGE) delta = Math.ceil(((EDGE - yBottom) / EDGE) * WIN_SPEED)
-    if (delta !== 0) window.scrollBy(0, delta)
-    autoRaf = window.requestAnimationFrame(tick)
-  }
-  const startAuto = () => {
-    if (autoRaf) return
-    window.addEventListener('pointermove', onPtrMove)
-    autoRaf = window.requestAnimationFrame(tick)
-  }
-  const stopAuto = () => {
-    if (!autoRaf) return
-    window.cancelAnimationFrame(autoRaf)
-    autoRaf = 0
-    window.removeEventListener('pointermove', onPtrMove)
-  }
+  // Auto-scroll now handled by shared util
 
   return (
     <TimeGrid anchor={anchor()} setRightPaneRef={(el) => (rightPaneRef = el)}>
@@ -294,14 +207,12 @@ export default function DayView(props: DayViewProps) {
                 if (!isStartSegment) return
                 const mins = minsFromClientY(ev.clientY)
                 setPreviewStart(baseId, mins)
-                const { move } = getDebouncers(baseId)
-                move(mins)
               }}
               onDragStart={() => startAuto()}
               onDragEnd={() => {
-                // Commit last position and clear preview
-                const { move } = getDebouncers(baseId)
-                move.flush()
+                // Commit last position using preview and clear it
+                const p = preview()[baseId]
+                if (p?.startMins != null) moveEvent(baseId, p.startMins)
                 clearPreviewStart(baseId)
                 stopAuto()
               }}
@@ -310,13 +221,11 @@ export default function DayView(props: DayViewProps) {
                 if (!isEndSegment) return
                 const mins = minsFromClientY(ev.clientY)
                 setPreviewEnd(baseId, mins)
-                const { resize } = getDebouncers(baseId)
-                resize(mins)
               }}
               onResizeStart={() => startAuto()}
               onResizeEnd={() => {
-                const { resize } = getDebouncers(baseId)
-                resize.flush()
+                const p = preview()[baseId]
+                if (p?.endMins != null) resizeEvent(baseId, p.endMins)
                 clearPreviewEnd(baseId)
                 stopAuto()
               }}

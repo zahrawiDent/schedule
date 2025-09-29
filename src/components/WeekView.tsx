@@ -8,7 +8,10 @@ import { assignLanes } from '../utils/lanes'
 import { HOURS, ROW_H, pxPerMinute, SNAP_MIN } from '../utils/timeGrid'
 import HoverIndicator from './HoverIndicator'
 import NowIndicator from './NowIndicator'
+import { computeMoveToDay, computeResizeToDay } from '../utils/eventUpdates'
 import { timesFromVerticalClick } from '../utils/slots'
+import { createPreviewState } from '../utils/dragPreview'
+import { createAutoScroll } from '../utils/autoScroll'
 
 // use shared time grid constants
 
@@ -22,6 +25,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
   const pxPerMin = pxPerMinute()
+  // Track active dragging so we can move the actual block across columns
+  const [dragging, setDragging] = createSignal<{ baseId: string } | null>(null)
   // WeekView no longer owns the "now" interval; NowIndicator handles it per day
 
   // Hover indicator (snapped to 15 min)
@@ -36,40 +41,21 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   function moveEventTo(id: string, dayIndex: number, newStartMins: number) {
     const ev = state.events.find((e) => e.id === id)
     if (!ev) return
-    const start = parseISO(ev.start)
-    const end = parseISO(ev.end)
-    const dur = (end.getTime() - start.getTime()) / 60000
-    const week0 = rangeStart()
-    const target = new Date(week0)
-    target.setDate(week0.getDate() + Math.max(0, Math.min(6, dayIndex)))
-    target.setHours(0, 0, 0, 0)
-    target.setMinutes(snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, newStartMins))))
-    const newEnd = new Date(target.getTime() + dur * 60000)
-    actions.update(id, { start: target.toISOString(), end: newEnd.toISOString() })
+    const patch = computeMoveToDay(ev, rangeStart(), dayIndex, newStartMins, snap, SNAP_MIN)
+    actions.update(id, patch)
+
+    console.log('##############################')
+    console.log('move patch', patch)
   }
 
   function resizeEventTo(id: string, dayIndex: number, newEndMins: number) {
     const ev = state.events.find((e) => e.id === id)
     if (!ev) return
-    const start = parseISO(ev.start)
-    const week0 = rangeStart()
-    // Determine the target end day from the hovered column
-    const endDay = new Date(week0)
-    endDay.setDate(week0.getDate() + Math.max(0, Math.min(6, dayIndex)))
-    endDay.setHours(0, 0, 0, 0)
+    const patch = computeResizeToDay(ev, rangeStart(), dayIndex, newEndMins, snap, SNAP_MIN)
+    actions.update(id, patch)
 
-    // Clamp minutes within the day and snap
-    const minsClamped = snap(Math.max(0, Math.min(24 * 60, newEndMins)))
-    const proposedEnd = new Date(endDay)
-    proposedEnd.setMinutes(minsClamped)
-
-    // Enforce minimum duration: end must be at least SNAP_MIN after start
-    const minEndTime = start.getTime() + SNAP_MIN * 60000
-    if (proposedEnd.getTime() < minEndTime) {
-      proposedEnd.setTime(minEndTime)
-    }
-
-    actions.update(id, { end: proposedEnd.toISOString() })
+    console.log('##############################')
+    console.log('resize patch', patch)
   }
 
   // using shared withPointer2D
@@ -109,35 +95,12 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
     return y / pxPerMin
   }
 
-  // Auto-scroll near viewport edges while dragging/resizing
-  let autoRaf = 0
-  const EDGE = 28
-  const WIN_SPEED = 20
-  const ptr = { x: 0, y: 0 }
-  const onPtrMove = (e: PointerEvent) => { ptr.x = (e as any).clientX; ptr.y = (e as any).clientY }
-  const tick = () => {
-    const yTop = ptr.y
-    const yBottom = window.innerHeight - ptr.y
-    let delta = 0
-    if (yTop < EDGE) delta = -Math.ceil(((EDGE - yTop) / EDGE) * WIN_SPEED)
-    else if (yBottom < EDGE) delta = Math.ceil(((EDGE - yBottom) / EDGE) * WIN_SPEED)
-    if (delta !== 0) window.scrollBy(0, delta)
-    autoRaf = window.requestAnimationFrame(tick)
-  }
-  const startAuto = () => {
-    if (autoRaf) return
-    window.addEventListener('pointermove', onPtrMove)
-    autoRaf = window.requestAnimationFrame(tick)
-  }
-  const stopAuto = () => {
-    if (!autoRaf) return
-    window.cancelAnimationFrame(autoRaf)
-    autoRaf = 0
-    window.removeEventListener('pointermove', onPtrMove)
-  }
+  // Shared preview state and auto-scroll
+  const { preview, setStart: setPreviewStart, setEnd: setPreviewEnd, clearStart: clearPreviewStart, clearEnd: clearPreviewEnd } = createPreviewState((m) => Math.round(m / SNAP_MIN) * SNAP_MIN, SNAP_MIN)
+  const { start: startAuto, stop: stopAuto } = createAutoScroll()
 
   return (
-    <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
+  <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
       {/* header */}
       <div class="bg-white border-b border-gray-200"></div>
       {days().map((d, i) => (
@@ -244,8 +207,21 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
             {/* events */}
             {sorted.map(({ data }) => {
               const { e, id, startMins, endMins } = data
-              const top = startMins * pxPerMin
-              const height = Math.max(ROW_H / 2, (endMins - startMins) * pxPerMin)
+              const baseId = e.sourceId ?? e.id
+              const p = preview()[baseId]
+              const isDraggingThis = dragging()?.baseId === baseId
+              const dispStartMins = (() => {
+                if (isDraggingThis && p?.startMins != null) return p.startMins
+                if (p?.startMins != null && (p?.dayIndex == null || p.dayIndex === i)) return p.startMins
+                return startMins
+              })()
+              const dispEndMins = (() => {
+                if (isDraggingThis && p?.endMins != null) return p.endMins
+                if (p?.endMins != null && (p?.dayIndex == null || p.dayIndex === i)) return p.endMins
+                return endMins
+              })()
+              const top = dispStartMins * pxPerMin
+              const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
               const lane = laneIndexById.get(id) ?? 0
               const gutter = 4 // px gap between lanes
               const widthPct = 100 / laneCount
@@ -255,6 +231,9 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               const eAbs = parseISO(e.end)
               const isStartSegment = isSameDay(sAbs, d)
               const isEndSegment = isSameDay(eAbs, d)
+              // Compute target column rect if dragging across columns
+              const targetDayIdx = p?.dayIndex ?? i
+              const targetRect = targetDayIdx != null ? columnEls[targetDayIdx]?.getBoundingClientRect() : null
               return (
                 <EventBlock
                   id={id}
@@ -264,13 +243,25 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   endISO={e.end}
                   draggable={!e.sourceId && isStartSegment}
                   resizable={!e.sourceId && isEndSegment}
-                  style={{
-                    top: `${top}px`,
-                    height: `${height}px`,
-                    left: `calc(${leftPct}% + ${gutter}px)`,
-                    width: `calc(${widthPct}% - ${gutter * 2}px)`,
-                    transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
-                  }}
+                  style={(() => {
+                    if (isDraggingThis && targetRect) {
+                      return {
+                        top: `${targetRect.top + top}px`,
+                        height: `${height}px`,
+                        left: `${targetRect.left + gutter}px`,
+                        width: `${targetRect.width - gutter * 2}px`,
+                        transition: 'none',
+                        ...( { position: 'fixed' } as any),
+                      }
+                    }
+                    return {
+                      top: `${top}px`,
+                      height: `${height}px`,
+                      left: `calc(${leftPct}% + ${gutter}px)`,
+                      width: `calc(${widthPct}% - ${gutter * 2}px)`,
+                      transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
+                    }
+                  })()}
                   onClick={(id) => props.onEventClick?.(id, { start: e.start, end: e.end })}
                   tabIndex={0}
                   onKeyDown={(ke: any) => {
@@ -295,18 +286,33 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                     if (!isStartSegment) return
                     const dayIdx = getDayIndexFromClientX(ev.clientX)
                     const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
-                    moveEventTo(id, dayIdx ?? i, mins)
+                    setPreviewStart(baseId, mins, dayIdx ?? i)
                   }}
-                  onDragStart={() => startAuto()}
-                  onDragEnd={() => stopAuto()}
+                  onDragStart={() => { setDragging({ baseId }); startAuto() }}
+                  onDragEnd={() => {
+                    const p = preview()[baseId]
+                    if (p?.startMins != null) {
+                      moveEventTo(baseId, p.dayIndex ?? i, p.startMins)
+                    }
+                    clearPreviewStart(baseId)
+                    setDragging(null)
+                    stopAuto()
+                  }}
                   onResize={(_dyPx, ev: any) => {
                     if (!isEndSegment) return
                     const dayIdx = getDayIndexFromClientX(ev.clientX)
                     const mins = minsFromClientYInDay(ev.clientY, dayIdx ?? i)
-                    resizeEventTo(id, dayIdx, mins)
+                    setPreviewEnd(baseId, mins, dayIdx ?? i)
                   }}
                   onResizeStart={() => startAuto()}
-                  onResizeEnd={() => stopAuto()}
+                  onResizeEnd={() => {
+                    const pr = preview()[baseId]
+                    if (pr?.endMins != null) {
+                      resizeEventTo(baseId, pr.dayIndex ?? i, pr.endMins)
+                    }
+                    clearPreviewEnd(baseId)
+                    stopAuto()
+                  }}
                 />
               )
             })}
