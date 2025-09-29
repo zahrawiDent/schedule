@@ -1,5 +1,5 @@
 import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod, isToday } from 'date-fns'
-import { createSignal, Show } from 'solid-js'
+import { createSignal, For, Show } from 'solid-js'
 import { weekRange } from '../utils/dateUtils'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
@@ -7,9 +7,9 @@ import EventBlock from './EventBlock'
 import { assignLanes } from '../utils/lanes'
 import { HOURS, ROW_H, pxPerMinute, SNAP_MIN } from '../utils/timeGrid'
 import HoverIndicator from './HoverIndicator'
+import SelectionOverlay from './SelectionOverlay'
 import NowIndicator from './NowIndicator'
 import { computeMoveToDay, computeResizeToDay } from '../utils/eventUpdates'
-import { timesFromVerticalClick } from '../utils/slots'
 import { createPreviewState } from '../utils/dragPreview'
 import { createAutoScroll } from '../utils/autoScroll'
 
@@ -100,22 +100,27 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const { start: startAuto, stop: stopAuto } = createAutoScroll()
 
   return (
-  <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
+    <div class="grid grid-cols-[60px_repeat(7,1fr)] gap-px bg-gray-50">
+
       {/* header */}
       <div class="bg-white border-b border-gray-200"></div>
-      {days().map((d, i) => (
-        <div
-          class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''} ${isToday(d) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
-        >
-          {format(d, 'EEE dd')}
-        </div>
-      ))}
+      <For each={days()}>
+        {(d, i) => (
+          <div
+            class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${i() < 6 ? 'border-r border-gray-200' : ''} ${isToday(d) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}
+          >
+            {format(d, 'EEE dd')}
+          </div>
+        )}
+      </For>
 
       {/* time labels */}
       <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
-        {HOURS.map((h) => (
-          <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
-        ))}
+        <For each={HOURS}>
+          {(h) => (
+            <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
+          )}
+        </For>
       </div>
 
       {/* 7 day columns */}
@@ -178,26 +183,19 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
             {/* selection overlay for this day */}
             {selectRange()?.dayIndex === i && (() => {
               const sel = selectRange()!
-              const top = Math.min(sel.start, sel.end) * pxPerMin
-              const height = Math.max(SNAP_MIN, Math.abs(sel.end - sel.start)) * pxPerMin
-              const startD = new Date(rangeStart())
-              startD.setDate(rangeStart().getDate() + i)
-              startD.setHours(0, 0, 0, 0)
-              startD.setMinutes(Math.min(sel.start, sel.end))
-              const endD = new Date(rangeStart())
-              endD.setDate(rangeStart().getDate() + i)
-              endD.setHours(0, 0, 0, 0)
-              endD.setMinutes(Math.max(sel.start, sel.end))
               return (
-                <div class="absolute inset-x-0 z-10 pointer-events-none">
-                  <div class="absolute left-0 right-0 bg-blue-200/30 border border-blue-300 rounded-sm" style={{ top: `${top}px`, height: `${height}px` }} />
-                  <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top}px` }}>
-                    {format(startD, 'h:mm')}
-                  </div>
-                  <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top + height}px` }}>
-                    {format(endD, 'h:mm')}
-                  </div>
-                </div>
+                <SelectionOverlay
+                  startMins={sel.start}
+                  endMins={sel.end}
+                  pxPerMin={pxPerMin}
+                  labelFor={(mins) => {
+                    const d0 = new Date(rangeStart())
+                    d0.setDate(rangeStart().getDate() + i)
+                    d0.setHours(0, 0, 0, 0)
+                    d0.setMinutes(mins)
+                    return format(d0, 'h:mm')
+                  }}
+                />
               )
             })()}
             {/* current time line in today's column (shared) */}
@@ -251,7 +249,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                         left: `${targetRect.left + gutter}px`,
                         width: `${targetRect.width - gutter * 2}px`,
                         transition: 'none',
-                        ...( { position: 'fixed' } as any),
+                        ...({ position: 'fixed' } as any),
                       }
                     }
                     return {
@@ -319,15 +317,6 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
             {/* slot click/drag to add/edit */}
             <div
               class="absolute inset-0 z-0"
-              onClick={(ev) => {
-                if (!props.onSlotClick) return
-                const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
-                const y = (ev as any).clientY - rect.top
-                const day = new Date(rangeStart())
-                day.setDate(rangeStart().getDate() + i)
-                const { startISO, endISO } = timesFromVerticalClick(day, y, pxPerMin)
-                props.onSlotClick(startISO, endISO)
-              }}
               onMouseMove={(ev) => {
                 const rect = (ev.currentTarget as HTMLDivElement).getBoundingClientRect()
                 // Don't show hover when over an EventBlock
@@ -340,38 +329,55 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               }}
               onPointerDown={(ev) => {
                 if (!props.onSlotClick) return
-                const rect0 = columnEls[i]?.getBoundingClientRect()
-                const startRaw = rect0 ? (((ev as any).clientY - rect0.top) / pxPerMin) : 0
+                
+                const startRaw = minsFromClientYInDay((ev as any).clientY, i)
                 const startMin = snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, startRaw)))
                 setSelectRange({ dayIndex: i, start: startMin, end: startMin })
+                
+                let hasDragged = false
                 startAuto()
+                
                 const onMove = (e: PointerEvent) => {
-                  const r = columnEls[i]?.getBoundingClientRect()
-                  const curRaw = r ? (((e as any).clientY - r.top) / pxPerMin) : 0
+                  hasDragged = true
+                  const curRaw = minsFromClientYInDay((e as any).clientY, i)
                   const curMin = snap(Math.max(0, Math.min(24 * 60, curRaw)))
                   setSelectRange({ dayIndex: i, start: startMin, end: curMin })
                 }
-                const onUp = (e: PointerEvent) => {
+                
+                const onUp = () => {
                   window.removeEventListener('pointermove', onMove)
                   window.removeEventListener('pointerup', onUp)
                   stopAuto()
-                  const r = columnEls[i]?.getBoundingClientRect()
-                  const endRaw = r ? (((e as any).clientY - r.top) / pxPerMin) : startMin
-                  const endMin = snap(Math.max(0, Math.min(24 * 60, endRaw)))
-                  const s = Math.min(startMin, endMin)
-                  const en = Math.max(startMin, endMin)
-                  const day = new Date(rangeStart())
-                  day.setDate(rangeStart().getDate() + i)
+                  
+                  // Use the current selection state instead of recalculating from pointer position
+                  const selection = selectRange()
+                  if (!selection || selection.dayIndex !== i) {
+                    setSelectRange(null)
+                    return
+                  }
+                  
+                  const startMins = Math.min(selection.start, selection.end)
+                  const endMins = Math.max(selection.start, selection.end)
+                  
+                  // Create start and end times for the selected day
+                  const day = days()[i]
                   const start = new Date(day)
                   start.setHours(0, 0, 0, 0)
-                  start.setMinutes(s)
+                  start.setMinutes(startMins)
+                  
                   const end = new Date(day)
                   end.setHours(0, 0, 0, 0)
-                  if (en === s) end.setMinutes(Math.min(24 * 60, s + 60))
-                  else end.setMinutes(en)
+                  // If no drag occurred or same position, default to 1 hour duration
+                  if (!hasDragged || endMins === startMins) {
+                    end.setMinutes(Math.min(24 * 60, startMins + 60))
+                  } else {
+                    end.setMinutes(endMins)
+                  }
+                  
                   props.onSlotClick!(start.toISOString(), end.toISOString())
                   setSelectRange(null)
                 }
+                
                 try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch { }
                 window.addEventListener('pointermove', onMove)
                 window.addEventListener('pointerup', onUp, { once: true } as any)

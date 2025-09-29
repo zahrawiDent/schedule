@@ -60,6 +60,7 @@ import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
 import { assignLanes } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
+import SelectionOverlay from './SelectionOverlay'
 import { createSignal } from 'solid-js'
 import { ROW_H, pxPerMinute, snapMins, SNAP_MIN } from '../utils/timeGrid'
 import { createPreviewState } from '../utils/dragPreview'
@@ -257,32 +258,18 @@ export default function DayView(props: DayViewProps) {
       {(() => {
         const sel = selectRange()
         if (!sel) return null as any
-        const top = Math.min(sel.start, sel.end) * pxPerMin
-        const height = Math.max(SNAP_MIN, Math.abs(sel.end - sel.start)) * pxPerMin
-        const startLabel = (() => {
-          // Label = anchor date with minutes set to selection start
-          const d = new Date(anchor())
-          d.setHours(0, 0, 0, 0)
-          d.setMinutes(Math.min(sel.start, sel.end))
-          return d
-        })()
-        const endLabel = (() => {
-          // Label = anchor date with minutes set to selection end
-          const d = new Date(anchor())
-          d.setHours(0, 0, 0, 0)
-          d.setMinutes(Math.max(sel.start, sel.end))
-          return d
-        })()
         return (
-          <div class="absolute inset-x-0 z-10 pointer-events-none">
-            <div class="absolute left-0 right-0 bg-blue-200/30 border border-blue-300 rounded-sm" style={{ top: `${top}px`, height: `${height}px` }} />
-            <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top}px` }}>
-              {new Date(startLabel).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-            </div>
-            <div class="absolute left-2 -translate-y-1/2 text-[10px] text-blue-700 bg-white/80 px-1.5 py-0.5 rounded border border-blue-200 shadow-sm" style={{ top: `${top + height}px` }}>
-              {new Date(endLabel).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
-            </div>
-          </div>
+          <SelectionOverlay
+            startMins={sel.start}
+            endMins={sel.end}
+            pxPerMin={pxPerMin}
+            labelFor={(mins) => {
+              const d = new Date(anchor())
+              d.setHours(0, 0, 0, 0)
+              d.setMinutes(mins)
+              return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+            }}
+          />
         )
       })()}
       {/* slot overlay for click or drag-to-select */}
