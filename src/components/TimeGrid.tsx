@@ -109,9 +109,14 @@ export default function TimeGrid(props: TimeGridProps) {
   return (
     // Two-column grid: [labels | content]
     <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': "60px 1fr" }}>
-      {/* Header row: empty cell left, formatted date on the right */}
+      {/* Header row: empty cell left, formatted date on the right (highlight if today) */}
       <div class="bg-white border-b border-gray-200"></div>
-      <div class="bg-white p-3 text-center text-sm font-medium text-gray-500 border-b border-gray-200">{format(props.anchor, 'PPPP')}</div>
+      <div class={`p-3 text-center text-sm font-medium border-b border-gray-200 ${isToday(props.anchor) ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-500'}`}>
+        <span>{format(props.anchor, 'PPPP')}</span>
+        <Show when={isToday(props.anchor)}>
+          <span class="ml-2 inline-flex items-center rounded-full bg-blue-100 text-blue-700 text-xs px-2 py-0.5 align-middle">Today</span>
+        </Show>
+      </div>
       {/* Left labels column: 24 rows, one per hour */}
       <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
         {HOURS.map((h) => (
@@ -137,6 +142,10 @@ export default function TimeGrid(props: TimeGridProps) {
         }}
         onMouseLeave={() => setHoverMins(null)}
       >
+        {/* Today background tint for the right pane */}
+        <Show when={isToday(props.anchor)}>
+          <div class="absolute inset-0 bg-blue-50/40 pointer-events-none" />
+        </Show>
         {/* Hour dividers (skip the very first line at 0:00) */}
         {HOURS.map((h) => (
           h > 0 ? (
