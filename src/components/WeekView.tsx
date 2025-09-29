@@ -4,7 +4,7 @@ import { weekRange } from '../utils/dateUtils'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
-import { assignLanes } from '../utils/lanes'
+import { layoutLanesWithSpan } from '../utils/lanes'
 import { HOURS, ROW_H, pxPerMinute, SNAP_MIN } from '../utils/timeGrid'
 import HoverIndicator from './HoverIndicator'
 import SelectionOverlay from './SelectionOverlay'
@@ -147,7 +147,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
           .filter((seg) => seg.endMins > seg.startMins)
           .sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins)
 
-        const { sorted, laneIndexById, laneCount } = assignLanes(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
+  // Improved width allocation: allow events to span across adjacent free columns
+  const { sorted, byId } = layoutLanesWithSpan(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
         return (
           <div
             class={`relative bg-white border-b border-gray-200 ${i < 6 ? 'border-r border-gray-200' : ''}`}
@@ -220,9 +221,12 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               })()
               const top = dispStartMins * pxPerMin
               const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
-              const lane = laneIndexById.get(id) ?? 0
+              const meta = byId.get(id) || { lane: 0, span: 1, totalLanes: 1 }
+              const lane = meta.lane
+              const span = meta.span
+              const total = meta.totalLanes
               const gutter = 4 // px gap between lanes
-              const widthPct = 100 / laneCount
+              const widthPct = 100 / total
               const leftPct = widthPct * lane
               // Determine if this segment is on the event's start day or end day
               const sAbs = parseISO(e.start)
@@ -249,14 +253,14 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                         left: `${targetRect.left + gutter}px`,
                         width: `${targetRect.width - gutter * 2}px`,
                         transition: 'none',
-                        ...({ position: 'fixed' } as any),
+                        ...({ position: 'fixed', zIndex: 60 } as any),
                       }
                     }
                     return {
                       top: `${top}px`,
                       height: `${height}px`,
                       left: `calc(${leftPct}% + ${gutter}px)`,
-                      width: `calc(${widthPct}% - ${gutter * 2}px)`,
+                      width: `calc(${widthPct * span}% - ${gutter * 2}px)`,
                       transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
                     }
                   })()}
@@ -329,42 +333,42 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               }}
               onPointerDown={(ev) => {
                 if (!props.onSlotClick) return
-                
+
                 const startRaw = minsFromClientYInDay((ev as any).clientY, i)
                 const startMin = snap(Math.max(0, Math.min(24 * 60 - SNAP_MIN, startRaw)))
                 setSelectRange({ dayIndex: i, start: startMin, end: startMin })
-                
+
                 let hasDragged = false
                 startAuto()
-                
+
                 const onMove = (e: PointerEvent) => {
                   hasDragged = true
                   const curRaw = minsFromClientYInDay((e as any).clientY, i)
                   const curMin = snap(Math.max(0, Math.min(24 * 60, curRaw)))
                   setSelectRange({ dayIndex: i, start: startMin, end: curMin })
                 }
-                
+
                 const onUp = () => {
                   window.removeEventListener('pointermove', onMove)
                   window.removeEventListener('pointerup', onUp)
                   stopAuto()
-                  
+
                   // Use the current selection state instead of recalculating from pointer position
                   const selection = selectRange()
                   if (!selection || selection.dayIndex !== i) {
                     setSelectRange(null)
                     return
                   }
-                  
+
                   const startMins = Math.min(selection.start, selection.end)
                   const endMins = Math.max(selection.start, selection.end)
-                  
+
                   // Create start and end times for the selected day
                   const day = days()[i]
                   const start = new Date(day)
                   start.setHours(0, 0, 0, 0)
                   start.setMinutes(startMins)
-                  
+
                   const end = new Date(day)
                   end.setHours(0, 0, 0, 0)
                   // If no drag occurred or same position, default to 1 hour duration
@@ -373,11 +377,11 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   } else {
                     end.setMinutes(endMins)
                   }
-                  
+
                   props.onSlotClick!(start.toISOString(), end.toISOString())
                   setSelectRange(null)
                 }
-                
+
                 try { (ev.currentTarget as any).setPointerCapture?.((ev as any).pointerId) } catch { }
                 window.addEventListener('pointermove', onMove)
                 window.addEventListener('pointerup', onUp, { once: true } as any)

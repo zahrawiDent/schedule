@@ -76,3 +76,78 @@ export function assignLanes<T>(segs: Array<Seg<T>>) {
   }
   return { sorted, laneIndexById, laneCount: Math.max(1, laneEnds.length) }
 }
+
+/**
+ * Advanced layout: assign lanes (columns) like assignLanes, then expand each event's span
+ * into adjacent free columns within its conflict group, so events that only partially overlap
+ * can utilize extra horizontal space. Returns per-id lane, span, and total lanes.
+ */
+export function layoutLanesWithSpan<T>(segs: Array<Seg<T>>) {
+  const sorted = segs
+    .filter((s) => s.endMins > s.startMins)
+    .sort((a, b) => (a.startMins - b.startMins) || a.id.localeCompare(b.id))
+
+  const groups: Array<Seg<T>[]> = []
+  let current: Seg<T>[] = []
+  let active: Seg<T>[] = []
+  let activeMaxEnd = -Infinity
+
+  for (const seg of sorted) {
+    // drop inactive
+    active = active.filter((s) => s.endMins > seg.startMins)
+    if (active.length === 0 && current.length > 0) {
+      groups.push(current)
+      current = []
+      activeMaxEnd = -Infinity
+    }
+    current.push(seg)
+    active.push(seg)
+    if (seg.endMins > activeMaxEnd) activeMaxEnd = seg.endMins
+  }
+  if (current.length) groups.push(current)
+
+  const byId = new Map<string, { lane: number; span: number; totalLanes: number }>()
+
+  const overlaps = (a: Seg<T>, b: Seg<T>) => a.startMins < b.endMins && b.startMins < a.endMins
+
+  for (const g of groups) {
+    // Column assignment per group
+    const colEnds: number[] = []
+    const colIndexById = new Map<string, number>()
+    for (const seg of g) {
+      let placed = false
+      for (let c = 0; c < colEnds.length; c++) {
+        if (colEnds[c] <= seg.startMins) {
+          colEnds[c] = seg.endMins
+          colIndexById.set(seg.id, c)
+          placed = true
+          break
+        }
+      }
+      if (!placed) {
+        colEnds.push(seg.endMins)
+        colIndexById.set(seg.id, colEnds.length - 1)
+      }
+    }
+    const colCount = Math.max(1, colEnds.length)
+    // Build per-column lists
+    const colSegs: Array<Seg<T>[]> = Array.from({ length: colCount }, () => [])
+    for (const seg of g) {
+      const c = colIndexById.get(seg.id) ?? 0
+      colSegs[c].push(seg)
+    }
+    // Compute span per seg
+    for (const seg of g) {
+      const lane = colIndexById.get(seg.id) ?? 0
+      let span = 1
+      for (let c = lane + 1; c < colCount; c++) {
+        const conflicts = colSegs[c].some((other) => overlaps(seg, other))
+        if (conflicts) break
+        span++
+      }
+      byId.set(seg.id, { lane, span, totalLanes: colCount })
+    }
+  }
+
+  return { sorted, byId }
+}

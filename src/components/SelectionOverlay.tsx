@@ -15,7 +15,7 @@ export default function SelectionOverlay(props: SelectionOverlayProps) {
   const height = Math.max(SNAP_MIN, Math.abs(end - start)) * props.pxPerMin
 
   return (
-    <div class="absolute inset-x-0 z-10 pointer-events-none">
+    <div class="absolute inset-x-0 z-30 pointer-events-none">
       <div
         class="absolute left-0 right-0 bg-blue-200/30 border border-blue-300 rounded-sm"
         style={{ top: `${top}px`, height: `${height}px` }}

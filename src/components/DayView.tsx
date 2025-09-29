@@ -58,7 +58,7 @@ import { parseISO, isSameDay, startOfDay, endOfDay } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
-import { assignLanes } from '../utils/lanes'
+import { layoutLanesWithSpan } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
 import SelectionOverlay from './SelectionOverlay'
 import { createSignal } from 'solid-js'
@@ -165,8 +165,8 @@ export default function DayView(props: DayViewProps) {
           .filter((seg) => seg.endMins > seg.startMins)
           .sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins)
 
-        const { sorted, laneIndexById, laneCount } = assignLanes(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
-        const gutter = 4
+  const { sorted, byId } = layoutLanesWithSpan(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
+  const gutter = 4
 
         return sorted.map(({ data }) => {
           const { e, id, startMins, endMins } = data
@@ -177,8 +177,11 @@ export default function DayView(props: DayViewProps) {
           const dispEndMins = p?.endMins != null ? p.endMins : endMins
           const top = dispStartMins * pxPerMin
           const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
-          const lane = laneIndexById.get(id) ?? 0
-          const widthPct = 100 / laneCount
+          const meta = byId.get(id) || { lane: 0, span: 1, totalLanes: 1 }
+          const lane = meta.lane
+          const span = meta.span
+          const total = meta.totalLanes
+          const widthPct = 100 / total
           const leftPct = widthPct * lane
           const sAbs = parseISO(e.start)
           const eAbs = parseISO(e.end)
@@ -199,7 +202,7 @@ export default function DayView(props: DayViewProps) {
                 top: `${top}px`,
                 height: `${height}px`,
                 left: `calc(${leftPct}% + ${gutter}px)`,
-                width: `calc(${widthPct}% - ${gutter * 2}px)`,
+                width: `calc(${widthPct * span}% - ${gutter * 2}px)`,
                 transition: 'top 120ms ease, height 120ms ease, left 120ms ease, width 120ms ease',
               }}
               onClick={(id) => props.onEventClick?.(id, { start: e.start, end: e.end })}
