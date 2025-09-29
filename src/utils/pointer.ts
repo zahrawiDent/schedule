@@ -1,4 +1,10 @@
 /**
+ * pointer helpers
+ * ---------------
+ * withPointer / withPointer2D manage pointer capture and lifecycle and invoke callbacks
+ * with pixel deltas. Attach the returned handler to onPointerDown.
+ */
+/**
  * Track a vertical pointer drag and report dy in pixels.
  * Returns a handler you can attach to onPointerDown.
  */

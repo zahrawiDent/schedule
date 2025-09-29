@@ -1,3 +1,12 @@
+/**
+ * dragPreview
+ * -----------
+ * Small ephemeral store that tracks in-progress drag/resize values per base event id.
+ *
+ * Purpose
+ * - Keep UI responsive by updating visuals immediately while deferring real state updates
+ * - Support vertical moves (startMins), resizes (endMins), and week-column moves (dayIndex)
+ */
 import { createSignal } from 'solid-js'
 
 export type PreviewEntry = {

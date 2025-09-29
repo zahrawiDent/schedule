@@ -1,3 +1,10 @@
+/**
+ * storage (IndexedDB via idb-keyval)
+ * ----------------------------------
+ * Legacy simple persistence of events and week-start preference.
+ * Currently the app uses TinyBase (see data/db.ts); this module remains for reference or
+ * potential future use.
+ */
 import { get, set } from 'idb-keyval'
 import type { EventItem, EventId, WeekStartDay } from '../types'
 

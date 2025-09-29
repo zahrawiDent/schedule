@@ -1,3 +1,8 @@
+/**
+ * slots
+ * -----
+ * Helpers to compute default/new event time slots based on user interactions.
+ */
 import { SNAP_MIN, snapMins } from './timeGrid'
 
 /**

@@ -1,3 +1,11 @@
+/**
+ * dateUtils
+ * ---------
+ * Small helpers wrapping date-fns for calendar-related calculations:
+ * - monthGrid/weekRange: generate day arrays for views respecting weekStartsOn
+ * - formatting helpers and ISO conversions
+ * - mergeDateWithTime, clampEvent, overlapsDay, etc.
+ */
 import {
   addDays,
   addMinutes,

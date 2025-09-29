@@ -1,3 +1,15 @@
+/**
+ * SelectionOverlay
+ * ----------------
+ * Visual overlay used while the user is selecting a time range in Day/Week views.
+ *
+ * Renders:
+ * - A translucent blue rectangle between start and end minutes
+ * - Two small labels: start time at the top and end time at the bottom
+ *
+ * This component is purely presentational; the parent supplies the minutes to render
+ * and the label formatting function.
+ */
 import { SNAP_MIN } from '../utils/timeGrid'
 
 type SelectionOverlayProps = {

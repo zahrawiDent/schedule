@@ -1,3 +1,10 @@
+/**
+ * WeekView
+ * --------
+ * Seven-column time grid showing a single week. Supports drag-to-move across days,
+ * resize across days, hover and selection overlays, and a live "now" indicator in today's column.
+ * Uses collision-aware lane stacking per day to avoid overlap.
+ */
 import { parseISO, format, addHours, startOfDay, startOfWeek, endOfWeek, isSameDay, startOfDay as sod, endOfDay as eod, isToday } from 'date-fns'
 import { createSignal, For, Show } from 'solid-js'
 import { weekRange } from '../utils/dateUtils'
@@ -5,7 +12,7 @@ import { useEvents } from '../context/EventsContext'
 import { expandEventsForRange, filterEvents } from '../utils/occurrence'
 import EventBlock from './EventBlock'
 import { assignLanes } from '../utils/lanes'
-import { HOURS, ROW_H, pxPerMinute, SNAP_MIN } from '../utils/timeGrid'
+import { HOURS, ROW_H, pxPerMinute, SNAP_MIN, absMinsToGridMins, gridMinsToAbsMins, hoursFrom } from '../utils/timeGrid'
 import HoverIndicator from './HoverIndicator'
 import SelectionOverlay from './SelectionOverlay'
 import NowIndicator from './NowIndicator'
@@ -25,6 +32,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
   const visible = () => filterEvents(occurrences(), { query: state.filters.query, categories: state.filters.categories as any })
 
   const pxPerMin = pxPerMinute()
+  const startHour = () => state.dayStartHour ?? 0
   // Track active dragging so we can move the actual block across columns
   const [dragging, setDragging] = createSignal<{ baseId: string } | null>(null)
   // Track grid ref for edge navigation
@@ -112,7 +120,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
     if (!el) return 0
     const rect = el.getBoundingClientRect()
     const y = clientY - rect.top
-    return y / pxPerMin
+    const grid = y / pxPerMin
+    return gridMinsToAbsMins(grid, startHour())
   }
 
   // Shared preview state and auto-scroll
@@ -136,7 +145,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
 
       {/* time labels */}
       <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
-        <For each={HOURS}>
+        <For each={hoursFrom(startHour())}>
           {(h) => (
             <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(anchor()), h), 'ha')}</div>
           )}
@@ -194,7 +203,8 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                   const day = new Date(rangeStart())
                   day.setDate(rangeStart().getDate() + i)
                   day.setHours(0, 0, 0, 0)
-                  day.setMinutes(hover()!.mins)
+                  const abs = gridMinsToAbsMins(hover()!.mins, startHour())
+                  day.setMinutes(abs)
                   return format(day, 'h:mm')
                 })()}
               />
@@ -205,14 +215,15 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
               const sel = selectRange()!
               return (
                 <SelectionOverlay
-                  startMins={sel.start}
-                  endMins={sel.end}
+                  startMins={absMinsToGridMins(sel.start, startHour())}
+                  endMins={absMinsToGridMins(sel.end, startHour())}
                   pxPerMin={pxPerMin}
                   labelFor={(mins) => {
                     const d0 = new Date(rangeStart())
                     d0.setDate(rangeStart().getDate() + i)
                     d0.setHours(0, 0, 0, 0)
-                    d0.setMinutes(mins)
+                    const abs = gridMinsToAbsMins(mins, startHour())
+                    d0.setMinutes(abs)
                     return format(d0, 'h:mm')
                   }}
                 />
@@ -220,7 +231,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
             })()}
             {/* current time line in today's column (shared) */}
             <Show when={isToday(d)}>
-              <NowIndicator date={d} pxPerMin={pxPerMin} />
+              <NowIndicator date={d} pxPerMin={pxPerMin} startHour={startHour()} />
             </Show>
             {/* events */}
             {sorted.map(({ data }) => {
@@ -238,7 +249,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
                 if (p?.endMins != null && (p?.dayIndex == null || p.dayIndex === i)) return p.endMins
                 return endMins
               })()
-              const top = dispStartMins * pxPerMin
+              const top = absMinsToGridMins(dispStartMins, startHour()) * pxPerMin
               const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
               const lane = laneIndexById.get(id) ?? 0
               const gutter = 4 // px gap between lanes
@@ -440,7 +451,7 @@ export default function WeekView(props: { onEventClick?: (id: string, patch?: Pa
           const endMins = eAbs.getHours() * 60 + eAbs.getMinutes()
           const dispStartMins = p?.startMins ?? startMins
           const dispEndMins = p?.endMins ?? endMins
-          const top = dispStartMins * pxPerMin
+          const top = absMinsToGridMins(dispStartMins, startHour()) * pxPerMin
           const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
           const gutter = 4
           return (

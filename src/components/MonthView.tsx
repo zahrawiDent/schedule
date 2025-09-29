@@ -1,3 +1,10 @@
+/**
+ * MonthView
+ * ---------
+ * Renders a month grid with 7 columns and 5-6 weeks, using MonthCell for each day and
+ * MonthPill for events. Supports drag-and-drop to move events between days, keyboard
+ * navigation with roving focus, auto-scroll during drag, and a simple click-to-add interaction.
+ */
 import { monthGrid, inMonth, getWeekDayLabels } from '../utils/dateUtils'
 import { parseISO, startOfDay, endOfDay, isWithinInterval, set } from 'date-fns'
 import { useEvents } from '../context/EventsContext'

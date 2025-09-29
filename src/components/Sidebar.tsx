@@ -1,3 +1,15 @@
+/**
+ * Sidebar
+ * -------
+ * Optional sidebar with simple client-side filters.
+ *
+ * Features
+ * - Text search over events (title, tags, location, notes via filterEvents)
+ * - Category toggles (College, Personal, Other)
+ *
+ * State integration
+ * - Reads and updates EventsContext filters.
+ */
 import { useEvents } from '../context/EventsContext'
 
 export default function Sidebar() {
@@ -30,6 +42,18 @@ export default function Sidebar() {
             </button>
           )
         })}
+      </div>
+      <div class="mt-4">
+        <label class="block text-xs text-gray-600 mb-1">Start of day</label>
+        <select
+          class="border rounded px-2 py-1 w-full text-sm"
+          value={String(state.dayStartHour ?? 0)}
+          onChange={(e) => actions.setDayStartHour(parseInt(e.currentTarget.value, 10))}
+        >
+          {Array.from({ length: 24 }, (_, h) => h).map((h) => (
+            <option value={h}>{`${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`}</option>
+          ))}
+        </select>
       </div>
     </aside>
   )

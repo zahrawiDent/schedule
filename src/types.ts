@@ -1,3 +1,7 @@
+/**
+ * Domain types for the calendar application.
+ * EventItem models both one-time and recurring events (via RRULE and exdates).
+ */
 export type ViewMode = 'month' | 'week' | 'day'
 
 export type Category = 'College' | 'Personal' | 'Other'

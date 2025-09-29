@@ -2,6 +2,8 @@
 import { createSignal, Show, createEffect } from 'solid-js'
 import { EventsProvider, useEvents } from './context/EventsContext'
 import CalendarNav from './components/CalendarNav'
+import SettingsModal from './components/SettingsModal'
+import CheatSheetModal from './components/CheatSheetModal'
 import MonthView from './components/MonthView'
 import WeekView from './components/WeekView'
 import DayView from './components/DayView'
@@ -14,6 +16,8 @@ import { scheduleReminders } from './utils/reminders'
 function CalendarApp() {
   const [open, setOpen] = createSignal(false)
   const [editing, setEditing] = createSignal<any>(null)
+  const [settingsOpen, setSettingsOpen] = createSignal(false)
+  const [cheatsOpen, setCheatsOpen] = createSignal(false)
   const [state, actions] = useEvents()
   const [remindersOn] = createSignal(false)
 
@@ -54,6 +58,9 @@ function CalendarApp() {
       if (e.key.toLowerCase() === 'n') {
         setOpen(true)
       }
+      if (e.key === '?') {
+        setCheatsOpen(true)
+      }
       if (['m', 'w', 'd'].includes(e.key.toLowerCase())) {
         const map: any = { m: 'month', w: 'week', d: 'day' }
         actions.setViewMode(map[e.key.toLowerCase()])
@@ -83,7 +90,7 @@ function CalendarApp() {
 
   return (
     <div class="min-h-screen flex flex-col">
-      <CalendarNav />
+  <CalendarNav onOpenSettings={() => setSettingsOpen(true)} onOpenCheats={() => setCheatsOpen(true)} />
 
       <div class="flex-1 overflow-hidden flex">
 
@@ -134,7 +141,9 @@ function CalendarApp() {
         initial={editing() ?? undefined}
         onSubmit={submit}
         onDelete={editing()?.id ? () => (actions.remove(editing()!.id), setOpen(false), setEditing(null)) : undefined}
-      />
+  />
+  <SettingsModal open={settingsOpen()} onClose={() => setSettingsOpen(false)} />
+  <CheatSheetModal open={cheatsOpen()} onClose={() => setCheatsOpen(false)} />
     </div >
   )
 }

@@ -62,13 +62,6 @@ export default function EventBlock(props: EventBlockProps) {
   const e = parseISO(props.endISO)
   // Track if a drag occurred to suppress click
   let didDrag = false
-  // Local ref to mutate z-index during drag/resize so the block stays on top
-  let rootEl: HTMLDivElement | null = null
-  const setElevated = (on: boolean) => {
-    if (!rootEl) return
-    // Use inline style to outrank Tailwind class z-index
-    rootEl.style.zIndex = on ? '50' : ''
-  }
   return (
     <div
   class={`absolute rounded-lg shadow-sm border border-white/20 text-white z-20 overflow-hidden transition-all duration-200 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-white/50 focus:ring-offset-1 focus:ring-offset-gray-100 select-none touch-none ${props.draggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
@@ -98,7 +91,6 @@ export default function EventBlock(props: EventBlockProps) {
               if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
                 didDrag = true
                 started = true
-                setElevated(true)
                 props.onDragStart?.()
               } else {
                 return
@@ -108,7 +100,6 @@ export default function EventBlock(props: EventBlockProps) {
           }, () => {
             // delay reset so click handler can see didDrag
             setTimeout(() => (didDrag = false), 0)
-            setElevated(false)
             if (started) props.onDragEnd?.()
           })(pe as any)
         } else if (props.onDragMove) {
@@ -117,7 +108,6 @@ export default function EventBlock(props: EventBlockProps) {
               if (Math.abs(dy) > 2) {
                 didDrag = true
                 started = true
-                setElevated(true)
                 props.onDragStart?.()
               } else {
                 return
@@ -126,7 +116,6 @@ export default function EventBlock(props: EventBlockProps) {
             props.onDragMove!(dy, ev)
           }, () => {
             setTimeout(() => (didDrag = false), 0)
-            setElevated(false)
             if (started) props.onDragEnd?.()
           })(pe as any)
         }
@@ -134,7 +123,7 @@ export default function EventBlock(props: EventBlockProps) {
       tabindex={props.tabIndex as any}
       onKeyDown={props.onKeyDown as any}
       onFocus={props.onFocus as any}
-      ref={(el) => { rootEl = el as HTMLDivElement; (props.setRef as any)?.(el) }}
+      ref={props.setRef as any}
       data-evid={props.id}
       title={`${props.title}\n${format(s, 'p')} – ${format(e, 'p')}`}
     >
@@ -148,9 +137,8 @@ export default function EventBlock(props: EventBlockProps) {
           title="Drag to resize"
           onPointerDown={(pe) => {
             pe.stopPropagation()
-            setElevated(true)
             props.onResizeStart?.()
-            withPointer((dy, ev) => props.onResize?.(dy, ev), () => { props.onResizeEnd?.(); setElevated(false) })(pe as any)
+            withPointer((dy, ev) => props.onResize?.(dy, ev), () => props.onResizeEnd?.())(pe as any)
           }}
         />
       )}

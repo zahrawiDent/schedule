@@ -1,3 +1,9 @@
+/**
+ * data/db (TinyBase)
+ * ------------------
+ * Local events persistence backed by TinyBase with browser localStorage persister.
+ * Exposes a minimal CRUD surface and a subscription helper for reactive updates.
+ */
 import { createStore, type Store, type Row } from 'tinybase'
 import { createLocalPersister } from 'tinybase/persisters/persister-browser'
 import type { EventItem } from '../types'

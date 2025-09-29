@@ -1,8 +1,12 @@
-// Lightweight debounce with flush support.
-// Usage:
-//  const d = makeDebounced((x) => doThing(x), 80)
-//  d(arg) // schedule
-//  d.flush() // commit latest immediately (e.g., on pointerup)
+/**
+ * debounce
+ * --------
+ * Lightweight debounce with flush support.
+ * Usage:
+ *  const d = makeDebounced((x) => doThing(x), 80)
+ *  d(arg) // schedule
+ *  d.flush() // commit latest immediately (e.g., on pointerup)
+ */
 
 export type DebouncedFn<T extends any[]> = ((...args: T) => void) & { flush: () => void }
 

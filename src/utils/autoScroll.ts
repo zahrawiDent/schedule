@@ -1,3 +1,11 @@
+/**
+ * autoScroll
+ * ----------
+ * Window auto-scroll utility for drag/resize operations. Starts a requestAnimationFrame loop
+ * that scrolls the window when the pointer nears the viewport edges.
+ *
+ * API: const { start, stop } = createAutoScroll(edgePx?, maxSpeed?)
+ */
 export function createAutoScroll(edge = 28, speed = 20) {
   let autoRaf = 0
   const ptr = { x: 0, y: 0 }

@@ -1,6 +1,10 @@
-// Occurrence utilities:
-// - Expand base events (including recurring ones) into concrete per-instance occurrences
-// - Provide a simple text/category filter for occurrences
+/**
+ * Occurrence utilities
+ * --------------------
+ * - expandEventsForRange: Expand base events (including recurring ones) into concrete per-instance
+ *   occurrences within a date interval.
+ * - filterEvents: Simple query/category filter for the resulting occurrences.
+ */
 import { endOfDay, startOfDay } from 'date-fns'
 import { rrulestr } from 'rrule'
 import type { EventItem, EventOccurrence } from '../types'

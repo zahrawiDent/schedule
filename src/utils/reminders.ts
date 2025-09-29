@@ -1,3 +1,9 @@
+/**
+ * reminders
+ * ---------
+ * Schedules browser Notifications for upcoming events within the next 24 hours.
+ * Requires Notification permission and a window environment. Returns a disposer to clear timers.
+ */
 import type { EventItem } from '../types'
 
 function whenFor(e: EventItem): number[] {

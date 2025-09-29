@@ -1,3 +1,7 @@
+// schedule backend
+// ----------------
+// PocketBase server that serves the built frontend (vite dist) from an embedded filesystem and
+// wires up migration support. Intended for simple deployment: build the frontend, run the server.
 package main
 
 import (
@@ -7,11 +11,12 @@ import (
 	"os"
 	"strings"
 
+	_ "schedule/migrations"
+
 	"github.com/pocketbase/pocketbase"
 	"github.com/pocketbase/pocketbase/apis"
 	"github.com/pocketbase/pocketbase/core"
 	"github.com/pocketbase/pocketbase/plugins/migratecmd"
-	_ "schedule/migrations"
 )
 
 // embed frontend/dist

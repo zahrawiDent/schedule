@@ -1,16 +1,29 @@
 /**
  * DayView
  * -------
- *
  * Renders a single day's time grid (via TimeGrid) along with interactive event blocks.
  *
  * Responsibilities
- * - Expand recurring events to concrete occurrences for the anchor day
+ * - Expand recurring events to concrete occurrences that overlap the anchor day
  * - Compute collision-aware lanes so overlapping events sit side-by-side
- * - Provide drag-to-move and resize interactions with snapping
+ * - Provide drag-to-move within the day and resize within the day with snapping
  * - Provide drag-to-select on empty time to quickly create an event
- * - Support keyboard roving focus and nudges
- * - Provide instant visual feedback during drag/resize while DEBOUNCING the actual state updates
+ * - Support keyboard roving focus and nudge operations
+ * - Provide instant visual feedback during drag/resize using a local preview store
+ *
+ * Visual + chrome
+ * - Header, hour labels, hover indicator, "now" line, and a subtle "today" background are
+ *   handled by TimeGrid/NowIndicator.
+ *
+ * Interactions
+ * - Dragging: preview.startMins updates on pointer move; on release we commit a single update.
+ * - Resizing: preview.endMins updates on pointer move; on release we commit a single update.
+ * - Edge navigation: while dragging near the left/right edges of the time pane, the anchor day
+ *   auto-advances backward/forward, and a fixed-position preview overlay keeps the item visible.
+ * - Selection: click-and-drag paints a selection overlay; a simple click creates a 60-minute
+ *   event starting at the snapped minute.
+ * - Keyboard: Ctrl+ArrowUp/Down roving focus across blocks; Enter opens; Delete removes; Arrow
+ *   keys nudge move/resize by SNAP_MIN on the appropriate start/end segment.
  *
  * Data flow
  * ---------
@@ -24,35 +37,10 @@
  *                                  │
  *                              render EventBlock(s)
  *
- * Lanes diagram (side-by-side stacking)
- * -------------------------------------
- * When events overlap in time, they are assigned lanes 0..N-1 and rendered with equal width
- * and a small gutter:
- *
- *  |<--------------------- 100% width ---------------------->|
- *  | lane 0         | lane 1         | lane 2               |
- *  | [ event A ]    | [ event B ]    | [ event C ]          |
- *
- * Vertical coordinate system (shared with TimeGrid)
- * -------------------------------------------------
+ * Coordinate system (shared with TimeGrid)
+ * ----------------------------------------
  *  y(px) = minutesFromMidnight * (ROW_H / 60)
  *  height(px) = durationMins * (ROW_H / 60)
- *
- * Instant preview + debounced commit
- * ----------------------------------
- * To keep UI buttery while reducing store churn:
- * - Visual position/size is driven by a local `preview` signal updated on every pointer move
- * - Actual event updates (actions.update) are debounced (~80ms) and flushed on pointer up
- *
- *  Dragging:
- *   - preview.startMins changes instantly (top moves)
- *   - debounced moveEvent commits start/end
- *
- *  Resizing:
- *   - preview.endMins changes instantly (height grows/shrinks)
- *   - debounced resizeEvent commits end
- *
- *  On end: flush debounced call and clear preview for that base event.
  */
 import { parseISO, isSameDay, startOfDay, endOfDay } from 'date-fns'
 import { useEvents } from '../context/EventsContext'
@@ -62,7 +50,7 @@ import { assignLanes } from '../utils/lanes'
 import TimeGrid from './TimeGrid'
 import SelectionOverlay from './SelectionOverlay'
 import { createSignal, Show } from 'solid-js'
-import { ROW_H, pxPerMinute, snapMins, SNAP_MIN } from '../utils/timeGrid'
+import { ROW_H, pxPerMinute, snapMins, SNAP_MIN, absMinsToGridMins, gridMinsToAbsMins } from '../utils/timeGrid'
 import { createPreviewState } from '../utils/dragPreview'
 import { createAutoScroll } from '../utils/autoScroll'
 import { computeMoveWithinDay, computeResizeWithinDay } from '../utils/eventUpdates'
@@ -95,6 +83,7 @@ export default function DayView(props: DayViewProps) {
     })
 
   const pxPerMin = pxPerMinute()
+  const startHour = () => state.dayStartHour ?? 0
 
   const snap = (mins: number) => snapMins(mins)
 
@@ -150,7 +139,9 @@ export default function DayView(props: DayViewProps) {
     if (!el) return 0
     const rect = el.getBoundingClientRect()
     const y = clientY - rect.top
-    return y / (ROW_H / 60)
+    // y -> grid minutes, then map to absolute minutes
+    const grid = y / (ROW_H / 60)
+    return gridMinsToAbsMins(grid, startHour())
   }
 
   // Drag-to-select range state (reactive)
@@ -176,26 +167,26 @@ export default function DayView(props: DayViewProps) {
             const sAbs = parseISO(e.start)
             const eAbs = parseISO(e.end)
             // For multi-day events, clamp the visual segment to this day only.
-            const startMins = Math.max(0, isSameDay(sAbs, day) ? sAbs.getHours() * 60 + sAbs.getMinutes() : 0)
-            const endMins = Math.min(24 * 60, isSameDay(eAbs, day) ? eAbs.getHours() * 60 + eAbs.getMinutes() : 24 * 60)
+            const startAbs = Math.max(0, isSameDay(sAbs, day) ? sAbs.getHours() * 60 + sAbs.getMinutes() : 0)
+            const endAbs = Math.min(24 * 60, isSameDay(eAbs, day) ? eAbs.getHours() * 60 + eAbs.getMinutes() : 24 * 60)
             // Use the occurrence id (unique) for lane stacking to avoid collisions for recurring series
-            return { e, id: e.id, startMins, endMins }
+            return { e, id: e.id, startAbs, endAbs }
           })
-          .filter((seg) => seg.endMins > seg.startMins)
-          .sort((a, b) => a.startMins - b.startMins || a.endMins - b.endMins)
+          .filter((seg) => seg.endAbs > seg.startAbs)
+          .sort((a, b) => a.startAbs - b.startAbs || a.endAbs - b.endAbs)
 
-        const { sorted, laneIndexById, laneCount } = assignLanes(segs.map(s => ({ id: s.id, startMins: s.startMins, endMins: s.endMins, data: s })))
+        const { sorted, laneIndexById, laneCount } = assignLanes(segs.map(s => ({ id: s.id, startMins: s.startAbs, endMins: s.endAbs, data: s })))
         const gutter = 4
 
         return sorted.map(({ data }) => {
-          const { e, id, startMins, endMins } = data
+          const { e, id, startAbs, endAbs } = data
           const baseId = e.sourceId ?? e.id
           const p = preview()[baseId]
           // Visual overrides: drag sets startMins (top), resize sets endMins (height)
-          const dispStartMins = p?.startMins != null ? p.startMins : startMins
-          const dispEndMins = p?.endMins != null ? p.endMins : endMins
-          const top = dispStartMins * pxPerMin
-          const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
+          const dispStartAbs = p?.startMins != null ? p.startMins : startAbs
+          const dispEndAbs = p?.endMins != null ? p.endMins : endAbs
+          const top = absMinsToGridMins(dispStartAbs, startHour()) * pxPerMin
+          const height = Math.max(ROW_H / 2, (dispEndAbs - startAbs) * pxPerMin)
           const lane = laneIndexById.get(id) ?? 0
           const widthPct = 100 / laneCount
           const leftPct = widthPct * lane
@@ -226,8 +217,8 @@ export default function DayView(props: DayViewProps) {
               onDragMove2D={(_dxPx, _dyPx, ev: any) => {
                 // Convert pointer Y to minutes; navigate days when hitting horizontal edges.
                 if (!isStartSegment) return
-                const mins = minsFromClientY(ev.clientY)
-                setPreviewStart(baseId, mins)
+                const abs = minsFromClientY(ev.clientY)
+                setPreviewStart(baseId, snap(abs))
                 const pane = rightPaneRef
                 if (pane) {
                   const rect = pane.getBoundingClientRect()
@@ -249,8 +240,8 @@ export default function DayView(props: DayViewProps) {
               onResize={(_dyPx, ev: any) => {
                 // Convert pointer Y to minutes and resize the base event's end.
                 if (!isEndSegment) return
-                const mins = minsFromClientY(ev.clientY)
-                setPreviewEnd(baseId, mins)
+                const abs = minsFromClientY(ev.clientY)
+                setPreviewEnd(baseId, snap(abs))
               }}
               onResizeStart={() => startAuto()}
               onResizeEnd={() => {
@@ -289,13 +280,14 @@ export default function DayView(props: DayViewProps) {
         if (!sel) return null as any
         return (
           <SelectionOverlay
-            startMins={sel.start}
-            endMins={sel.end}
+            startMins={absMinsToGridMins(sel.start, startHour())}
+            endMins={absMinsToGridMins(sel.end, startHour())}
             pxPerMin={pxPerMin}
-            labelFor={(mins) => {
+            labelFor={(gridMins) => {
               const d = new Date(anchor())
               d.setHours(0, 0, 0, 0)
-              d.setMinutes(mins)
+              const abs = gridMinsToAbsMins(gridMins, startHour())
+              d.setMinutes(abs)
               return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
             }}
           />
@@ -354,12 +346,12 @@ export default function DayView(props: DayViewProps) {
           const p = preview()[baseId]
           const sAbs = parseISO(ev.start)
           const eAbs = parseISO(ev.end)
-          const startMins = sAbs.getHours() * 60 + sAbs.getMinutes()
-          const endMins = eAbs.getHours() * 60 + eAbs.getMinutes()
-          const dispStartMins = p?.startMins != null ? p.startMins : startMins
-          const dispEndMins = p?.endMins != null ? p.endMins : endMins
-          const top = dispStartMins * pxPerMin
-          const height = Math.max(ROW_H / 2, (dispEndMins - startMins) * pxPerMin)
+          const startAbs = sAbs.getHours() * 60 + sAbs.getMinutes()
+          const endAbs = eAbs.getHours() * 60 + eAbs.getMinutes()
+          const dispStartAbs = p?.startMins != null ? p.startMins : startAbs
+          const dispEndAbs = p?.endMins != null ? p.endMins : endAbs
+          const top = absMinsToGridMins(dispStartAbs, startHour()) * pxPerMin
+          const height = Math.max(ROW_H / 2, (dispEndAbs - startAbs) * pxPerMin)
           const rect = (pane as HTMLDivElement).getBoundingClientRect()
           const gutter = 4
           return (

@@ -5,8 +5,9 @@
  * A presentational component that renders a single-day, 24-hour vertical grid with:
  * - A left column of hour labels
  * - A right column where children are absolutely positioned relative to time
- * - A live "now" indicator (only when the anchor is today)
+ * - A live "now" indicator (only when the anchor is today) via NowIndicator
  * - A hover indicator snapped to the configured grid
+ * - A subtle "today" background tint and a "Today" badge in the header when anchor is today
  *
  * This component does not manage or mutate events. It only provides the visual grid and
  * interaction affordances; consumers position their own children using absolute CSS top/height
@@ -80,14 +81,15 @@
  *   to reduce visual noise on top of event blocks.
  *
  * Live "now" indicator
- The "now" line is updated every 30s with a window.setInterval; the timer is cleared on unmount.
+ * NowIndicator owns the timer and visibility updates, decoupled from TimeGrid.
  */
 import type { JSX } from 'solid-js';
 import { createSignal, Show } from 'solid-js'
-import { HOURS, ROW_H, SNAP_MIN } from '../utils/timeGrid'
+import { HOURS, ROW_H, SNAP_MIN, hoursFrom, gridMinsToAbsMins } from '../utils/timeGrid'
 import { addHours, format, isToday, startOfDay } from 'date-fns'
 import HoverIndicator from './HoverIndicator'
 import NowIndicator from './NowIndicator'
+import { useEvents } from '../context/EventsContext'
 
 /**
  * Props for TimeGrid
@@ -102,10 +104,13 @@ type TimeGridProps = {
   setRightPaneRef?: (el: HTMLDivElement | null) => void
 }
 export default function TimeGrid(props: TimeGridProps) {
+  const [state] = useEvents()
   // Width in pixels for the labels column
   // Minutes from midnight under the cursor in the right pane (snapped); null when not hovering
   const [hoverMins, setHoverMins] = createSignal<number | null>(null)
   // TimeGrid no longer owns the "now" interval; NowIndicator handles it per provided date
+  const startHour = () => state.dayStartHour ?? 0
+  const hours = () => hoursFrom(startHour())
   return (
     // Two-column grid: [labels | content]
     <div class={`grid gap-px bg-gray-50`} style={{ 'grid-template-columns': "60px 1fr" }}>
@@ -119,7 +124,7 @@ export default function TimeGrid(props: TimeGridProps) {
       </div>
       {/* Left labels column: 24 rows, one per hour */}
       <div class="bg-white border-r border-gray-200" style={{ height: `${ROW_H * 24}px` }}>
-        {HOURS.map((h) => (
+        {hours().map((h) => (
           <div class="h-16 flex items-start justify-end pr-2 text-xs text-gray-500">{format(addHours(startOfDay(props.anchor), h), 'ha')}</div>
         ))}
       </div>
@@ -154,7 +159,7 @@ export default function TimeGrid(props: TimeGridProps) {
         ))}
         {/* "Now" indicator (today only) using shared component */}
         <Show when={isToday(props.anchor)}>
-          <NowIndicator date={props.anchor} pxPerMin={ROW_H / 60} />
+          <NowIndicator date={props.anchor} pxPerMin={ROW_H / 60} startHour={startHour()} />
         </Show>
 
         {/* Hover indicator: a faint blue line and a tiny timestamp label at the left. */}
@@ -163,7 +168,13 @@ export default function TimeGrid(props: TimeGridProps) {
           <HoverIndicator
             mins={hoverMins()!}
             pxPerMin={ROW_H / 60}
-            label={format(new Date(props.anchor.getFullYear(), props.anchor.getMonth(), props.anchor.getDate(), 0, hoverMins() || 0), 'h:mm')}
+            label={(() => {
+              const absMins = gridMinsToAbsMins(hoverMins() || 0, startHour())
+              const d = new Date(props.anchor)
+              d.setHours(0, 0, 0, 0)
+              d.setMinutes(absMins)
+              return format(d, 'h:mm')
+            })()}
           />
         </Show>
         {/* Consumer-provided absolutely positioned content (events, selections, etc.) */}

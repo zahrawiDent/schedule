@@ -1,46 +1,8 @@
 /**
- * Lane assignment for overlapping time segments
- * --------------------------------------------
- *
- * This module assigns each time segment (start/end in minutes within a day) to a zero-based
- * lane index such that overlapping segments never share the same lane. Segments that only
- * touch (end == start) are allowed to reuse a lane. The algorithm is greedy and deterministic.
- *
- * Core idea (sweep line):
- * - Sort segments by start minute (and by id as a stable tiebreaker)
- * - Maintain an array `laneEnds`, where laneEnds[i] is the end minute of the last segment placed
- *   into lane i
- * - For each segment in order, place it into the first lane whose end <= segment.start; if none,
- *   create a new lane
- *
- * ASCII sketch
- * ------------
- * Minutes →
- *   0        60       120      180      240
- *   |---------A---------|
- *             |----B----|
- *                       |---C---|
- *
- * Lanes:
- *   lane 0:  [A]                [C]
- *   lane 1:         [B]
- *
- * Touching vs overlapping
- * -----------------------
- *  - Overlap: a.start < b.end and b.start < a.end
- *  - Touching (no overlap): a.end == b.start or b.end == a.start → may share a lane
- *
- * Tie-breaking and stability
- * --------------------------
- *  - Primary sort key: startMins ascending
- *  - Secondary key: id (string) ascending
- *  This makes the output stable across re-renders and reduces horizontal flicker when durations
- *  change but relative ordering at the same minute stays consistent.
- *
- * Complexity
- * ----------
- *  - Sorting: O(n log n)
- *  - Placement: O(n * L) where L is number of lanes (worst-case O(n^2), but typically small)
+ * lanes
+ * -----
+ * Assign each time segment to a horizontal lane so overlapping segments render side-by-side.
+ * Greedy sweep-line algorithm with stable ordering and touching segments sharing lanes.
  */
 /** A time segment to be stacked in lanes (minutes within a day). */
 export type Seg<T> = { id: string; startMins: number; endMins: number; data: T }
@@ -75,79 +37,4 @@ export function assignLanes<T>(segs: Array<Seg<T>>) {
     }
   }
   return { sorted, laneIndexById, laneCount: Math.max(1, laneEnds.length) }
-}
-
-/**
- * Advanced layout: assign lanes (columns) like assignLanes, then expand each event's span
- * into adjacent free columns within its conflict group, so events that only partially overlap
- * can utilize extra horizontal space. Returns per-id lane, span, and total lanes.
- */
-export function layoutLanesWithSpan<T>(segs: Array<Seg<T>>) {
-  const sorted = segs
-    .filter((s) => s.endMins > s.startMins)
-    .sort((a, b) => (a.startMins - b.startMins) || a.id.localeCompare(b.id))
-
-  const groups: Array<Seg<T>[]> = []
-  let current: Seg<T>[] = []
-  let active: Seg<T>[] = []
-  let activeMaxEnd = -Infinity
-
-  for (const seg of sorted) {
-    // drop inactive
-    active = active.filter((s) => s.endMins > seg.startMins)
-    if (active.length === 0 && current.length > 0) {
-      groups.push(current)
-      current = []
-      activeMaxEnd = -Infinity
-    }
-    current.push(seg)
-    active.push(seg)
-    if (seg.endMins > activeMaxEnd) activeMaxEnd = seg.endMins
-  }
-  if (current.length) groups.push(current)
-
-  const byId = new Map<string, { lane: number; span: number; totalLanes: number }>()
-
-  const overlaps = (a: Seg<T>, b: Seg<T>) => a.startMins < b.endMins && b.startMins < a.endMins
-
-  for (const g of groups) {
-    // Column assignment per group
-    const colEnds: number[] = []
-    const colIndexById = new Map<string, number>()
-    for (const seg of g) {
-      let placed = false
-      for (let c = 0; c < colEnds.length; c++) {
-        if (colEnds[c] <= seg.startMins) {
-          colEnds[c] = seg.endMins
-          colIndexById.set(seg.id, c)
-          placed = true
-          break
-        }
-      }
-      if (!placed) {
-        colEnds.push(seg.endMins)
-        colIndexById.set(seg.id, colEnds.length - 1)
-      }
-    }
-    const colCount = Math.max(1, colEnds.length)
-    // Build per-column lists
-    const colSegs: Array<Seg<T>[]> = Array.from({ length: colCount }, () => [])
-    for (const seg of g) {
-      const c = colIndexById.get(seg.id) ?? 0
-      colSegs[c].push(seg)
-    }
-    // Compute span per seg
-    for (const seg of g) {
-      const lane = colIndexById.get(seg.id) ?? 0
-      let span = 1
-      for (let c = lane + 1; c < colCount; c++) {
-        const conflicts = colSegs[c].some((other) => overlaps(seg, other))
-        if (conflicts) break
-        span++
-      }
-      byId.set(seg.id, { lane, span, totalLanes: colCount })
-    }
-  }
-
-  return { sorted, byId }
 }

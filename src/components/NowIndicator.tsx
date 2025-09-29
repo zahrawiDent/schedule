@@ -1,6 +1,7 @@
 import type { JSX } from 'solid-js'
 import { createSignal, onCleanup, createEffect } from 'solid-js'
 import { isSameDay } from 'date-fns'
+import { absMinsToGridMins } from '../utils/timeGrid'
 
 /**
  * NowIndicator
@@ -13,12 +14,14 @@ import { isSameDay } from 'date-fns'
  * - pxPerMin: pixel scale (ROW_H / 60)
  * - dotLeft: optional CSS left value for the dot (defaults to '0.25rem')
  */
-export default function NowIndicator(props: { date: Date; pxPerMin: number; dotLeft?: string }): JSX.Element | null {
+export default function NowIndicator(props: { date: Date; pxPerMin: number; dotLeft?: string; startHour?: number }): JSX.Element | null {
   const [mins, setMins] = createSignal<number | null>(null)
   const update = () => {
     const now = new Date()
     if (isSameDay(now, props.date)) {
-      setMins(now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60)
+      const abs = now.getHours() * 60 + now.getMinutes() + now.getSeconds() / 60
+      const grid = absMinsToGridMins(abs, props.startHour ?? 0)
+      setMins(grid)
     } else {
       setMins(null)
     }

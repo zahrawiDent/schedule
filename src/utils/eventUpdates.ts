@@ -1,3 +1,14 @@
+/**
+ * eventUpdates
+ * ------------
+ * Pure helper functions that compute new EventItem start/end values in response to UI actions.
+ * All functions are timezone-agnostic and operate on ISO strings using the provided day/indices.
+ *
+ * Contracts
+ * - Inputs: base event, anchor day (or week start + day index), target minutes from midnight
+ * - Snapping: callers pass in snap() and SNAP_MIN to enforce consistent grid behavior
+ * - Outputs: minimal patch objects suitable for actions.update
+ */
 import { parseISO } from 'date-fns'
 
 import type { EventItem } from '../types'

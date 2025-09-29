@@ -1,3 +1,13 @@
+/**
+ * MonthPill
+ * ---------
+ * Small pill-like button used inside month cells to represent a single event.
+ *
+ * Props
+ * - title: text shown inside the pill
+ * - color: optional color dot shown before the title
+ * - onActivate: fired on click or keyboard activate (Enter/Space)
+ */
 type Props = {
   title: string
   color?: string
